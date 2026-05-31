@@ -59,6 +59,26 @@ buildConfigCommands(program);
 buildProfileCommands(program);
 buildDoctorCommand(program);
 
+program
+  .command("completion")
+  .description("Print shell completion setup for bash, zsh, or fish")
+  .argument("[shell]", "shell: bash|zsh|fish", "bash")
+  .action((shell: string) => {
+    if (shell === "bash") {
+      process.stdout.write('complete -W "$(swiggy --help | sed -n \'s/^  \\([a-z][^ ]*\\).*/\\1/p\')" swiggy\n');
+      return;
+    }
+    if (shell === "zsh") {
+      process.stdout.write("#compdef swiggy\n_arguments '1:command:($(swiggy --help | sed -n \"s/^  \\([a-z][^ ]*\\).*/\\1/p\"))'\n");
+      return;
+    }
+    if (shell === "fish") {
+      process.stdout.write("complete -c swiggy -f -a '(swiggy --help | string match -r \"^  [a-z].*\" | string split \" \" -f 3)'\n");
+      return;
+    }
+    throw new UsageError(`Unknown shell "${shell}".`, "Use: swiggy completion bash|zsh|fish");
+  });
+
 attachOutputOptions(
   program
     .command("whoami")
