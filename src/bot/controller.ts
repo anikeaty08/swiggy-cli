@@ -79,7 +79,8 @@ export class SwiggyTelegramBot {
         return;
       }
       if (text === "/auth" || text.startsWith("/auth ")) {
-        await this.client.sendMessage(chatId, authText(this.executor(user), text.split(/\s+/)[1] || "food"), undefined, "HTML");
+        const commandText = this.executor(user).authCommand(text.split(/\s+/)[1] || "food");
+        await this.client.sendMessage(chatId, authText(commandText), authKeyboard(commandText), "HTML");
         return;
       }
       if (text === "/status") {
@@ -177,6 +178,12 @@ export class SwiggyTelegramBot {
         await this.store.updateUser(callback.from.id, { lastSearch: nextSearch });
         if (messageId) await this.client.editMessageText(chatId, messageId, renderSearchPage(nextSearch), searchKeyboard(nextSearch), "HTML");
         await this.client.answerCallbackQuery(callback.id);
+        return;
+      }
+
+      if (data === "auth:status") {
+        await this.client.answerCallbackQuery(callback.id);
+        await this.client.sendMessage(chatId, await this.renderStatus(user), undefined, "HTML");
         return;
       }
 
@@ -492,16 +499,35 @@ function looksLikeAddressId(value: string): boolean {
   return /^[a-z0-9_-]{8,}$/i.test(value) && !/\s/.test(value);
 }
 
-function authText(executor: SwiggyCliExecutor, server: string): string {
+function authText(commandText: string): string {
   return [
     b("Link Swiggy profile"),
-    "Run this on the bot host:",
+    "Run this on the bot host. The browser will open automatically:",
     "",
-    code(executor.authCommand(server)),
+    code(commandText),
     "",
     `After browser login, send ${code("/status")} here.`,
     "The OAuth callback is local, so run this on the machine hosting the bot.",
   ].join("\n");
+}
+
+function authKeyboard(commandText: string): unknown {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "Copy login command",
+          copy_text: { text: commandText },
+        },
+      ],
+      [
+        {
+          text: "Check status",
+          callback_data: "auth:status",
+        },
+      ],
+    ],
+  };
 }
 
 function sleep(ms: number): Promise<void> {

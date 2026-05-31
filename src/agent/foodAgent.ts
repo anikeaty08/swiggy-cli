@@ -164,7 +164,7 @@ export class FoodAgent {
         if (!match) break;
         planItems.push({
           recommendation: toRecommendation(component.query, scoreCandidate(match), undefined),
-          quantity: component.quantity,
+          quantity: orderQuantityForMatch(match, component.quantity),
         });
       }
       if (planItems.length !== components.length) continue;
@@ -316,6 +316,9 @@ function avoidComponentKeywords(query: string): string[] {
   if (tokens.includes("roti")) {
     return ["sabzi", "sabji", "curry", "gravy", "combo", "meal", "thali", "egg", "omlet", "omelet", "omelette", "chicken", "paneer"];
   }
+  if (tokens.includes("paneer") && query.includes("sabzi")) {
+    return ["rice", "biryani", "roll", "noodle", "fried rice", "paratha meal"];
+  }
   if (tokens.includes("egg")) return ["biryani", "rice", "roll", "combo", "meal", "thali"];
   return [];
 }
@@ -347,6 +350,21 @@ function componentScore(candidate: ScoredCandidate, component: FoodComponent, mo
   const repeatedItemPenalty = component.quantity > 1 && (candidate.estimatedTotal ?? 0) > 80 ? 200 : 0;
   const base = mode === "cheapest" ? candidate.estimatedTotal ?? Number.POSITIVE_INFINITY : valueScore(candidate);
   return base + avoidPenalty + repeatedItemPenalty;
+}
+
+function orderQuantityForMatch(candidate: MenuCandidate, requestedQuantity: number): number {
+  const name = candidate.itemName ?? "";
+  const packCount = extractPackCount(name);
+  if (packCount && packCount >= requestedQuantity) return 1;
+  if (packCount && packCount > 1) return Math.ceil(requestedQuantity / packCount);
+  return requestedQuantity;
+}
+
+function extractPackCount(name: string): number | undefined {
+  const direct = name.match(/\b(\d+)\s*(?:pc|pcs|piece|pieces)\b/i);
+  const packOf = name.match(/\bpack\s+of\s+(\d+)\b/i);
+  const value = Number(direct?.[1] ?? packOf?.[1]);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 function sumPlanEstimate(items: FoodPlanItem[]): number {

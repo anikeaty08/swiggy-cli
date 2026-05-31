@@ -127,7 +127,10 @@ function extractUpiPaymentOptions(payload: unknown): Array<{ label: string; uri?
     const label = firstString(record, ["displayName", "display_name", "name", "label", "title"]) ?? "UPI option";
     const uri = firstString(record, ["upiUri", "upi_uri", "intentUrl", "intent_url", "deepLink", "deeplink", "paymentUrl", "payment_url", "qrData", "qr_data"]);
     const group = firstString(record, ["groupName", "group_name", "type", "payment_code"]);
-    if (uri?.startsWith("upi://") || /upi/i.test(group ?? "") || /upi/i.test(label)) {
+    const upiIntent = record.upiIntent === true || record.upi_intent === true;
+    const hasUsableUri = Boolean(uri && (uri.startsWith("upi://") || /^https?:\/\//i.test(uri)));
+    const explicitlyUpi = upiIntent || /upi/i.test(group ?? "") || (/upi/i.test(label) && hasUsableUri);
+    if (hasUsableUri || explicitlyUpi) {
       out.push({ label, uri });
     }
     queue.push(...Object.values(record).filter((value) => value && typeof value === "object"));
