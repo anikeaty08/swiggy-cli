@@ -1,4 +1,4 @@
-import type { FoodRecommendation, PendingFoodPlan, TelegramUserProfile } from "../bot/types.js";
+import type { FoodRecommendation, FoodSearchMode, FoodSearchSession, PendingFoodPlan, TelegramUserProfile } from "../bot/types.js";
 import { SwiggyCliExecutor } from "./cliExecutor.js";
 import { renderFoodCartSummary } from "./cartSummary.js";
 import { deepFindArray, firstNumber, firstString, formatMoney } from "./jsonHeuristics.js";
@@ -6,12 +6,13 @@ import { deepFindArray, firstNumber, firstString, formatMoney } from "./jsonHeur
 export interface FoodAgentResult {
   reply: string;
   plan?: PendingFoodPlan;
+  search?: FoodSearchSession;
 }
 
 export class FoodAgent {
   constructor(private readonly executor: SwiggyCliExecutor) {}
 
-  async recommend(query: string, user: TelegramUserProfile): Promise<FoodAgentResult> {
+  async recommend(query: string, user: TelegramUserProfile, mode: FoodSearchMode = "best_value"): Promise<FoodAgentResult> {
     if (!user.addressId) {
       return {
         reply:
@@ -37,26 +38,9 @@ export class FoodAgent {
     const bestCoupon = coupons?.ok ? extractBestCoupon(coupons.data) : undefined;
     const ranked = candidates
       .map((candidate) => scoreCandidate(candidate, bestCoupon))
-      .sort((a, b) => (a.estimatedTotal ?? Number.POSITIVE_INFINITY) - (b.estimatedTotal ?? Number.POSITIVE_INFINITY));
-    const best = ranked[0]!;
-    const addOn = bestCoupon?.minimumOrderValue && best.price && best.price < bestCoupon.minimumOrderValue
-      ? bestCoupon.minimumOrderValue - best.price
-      : undefined;
-
-    const recommendation: FoodRecommendation = {
-      title: best.itemName || best.restaurantName || query,
-      restaurantName: best.restaurantName,
-      restaurantId: best.restaurantId,
-      itemName: best.itemName,
-      itemId: best.itemId,
-      estimatedTotal: best.estimatedTotal,
-      savings: best.savings,
-      couponCode: best.couponCode,
-      addOnSuggestion: addOn && addOn > 0 ? `Add about ${formatMoney(addOn)} more to test the coupon threshold.` : undefined,
-      eta: best.eta,
-      rating: best.rating,
-      raw: best.raw,
-    };
+      .sort((a, b) => compareCandidates(a, b, mode));
+    const options = ranked.map((candidate) => toRecommendation(query, candidate, bestCoupon));
+    const recommendation = options[0]!;
 
     const plan: PendingFoodPlan = {
       kind: "food_order",
@@ -68,7 +52,26 @@ export class FoodAgent {
 
     return {
       plan,
-      reply: renderRecommendation(query, recommendation, ranked.length),
+      search: {
+        kind: "food_search",
+        query,
+        mode,
+        addressId: user.addressId,
+        page: 0,
+        options,
+        createdAt: new Date().toISOString(),
+      },
+      reply: renderRecommendation(query, recommendation, ranked, mode),
+    };
+  }
+
+  createPlan(query: string, addressId: string, recommendation: FoodRecommendation): PendingFoodPlan {
+    return {
+      kind: "food_order",
+      query,
+      addressId,
+      createdAt: new Date().toISOString(),
+      recommendation,
     };
   }
 
@@ -95,7 +98,13 @@ export class FoodAgent {
     }
 
     const cart = await this.executor.foodCart(plan.addressId);
-    const cartText = cart.ok ? renderFoodCartSummary(cart.data) : `Could not fetch cart: ${cart.error.code} ${cart.error.message}`;
+    const cartText = cart.ok
+      ? renderFoodCartSummary(cart.data, {
+          itemName: r.itemName,
+          restaurantName: r.restaurantName,
+          estimatedTotal: r.estimatedTotal,
+        })
+      : `Could not fetch cart: ${cart.error.code} ${cart.error.message}`;
     return (
       `Added to cart: ${r.itemName ?? r.itemId} from ${r.restaurantName ?? r.restaurantId}` +
       couponLine +
@@ -263,6 +272,46 @@ function scoreCandidate(candidate: MenuCandidate, coupon?: CouponCandidate): Men
   };
 }
 
+function toRecommendation(query: string, candidate: ScoredCandidate, coupon?: CouponCandidate): FoodRecommendation {
+  const addOn = coupon?.minimumOrderValue && candidate.price && candidate.price < coupon.minimumOrderValue
+    ? coupon.minimumOrderValue - candidate.price
+    : undefined;
+  return {
+    title: candidate.itemName || candidate.restaurantName || query,
+    restaurantName: candidate.restaurantName,
+    restaurantId: candidate.restaurantId,
+    itemName: candidate.itemName,
+    itemId: candidate.itemId,
+    estimatedTotal: candidate.estimatedTotal,
+    savings: candidate.savings,
+    couponCode: candidate.couponCode,
+    addOnSuggestion: addOn && addOn > 0 ? `Add about ${formatMoney(addOn)} more to test the coupon threshold.` : undefined,
+    eta: candidate.eta,
+    rating: candidate.rating,
+    raw: candidate.raw,
+  };
+}
+
+type ScoredCandidate = MenuCandidate & {
+  estimatedTotal?: number;
+  savings?: number;
+  couponCode?: string;
+};
+
+function compareCandidates(a: ScoredCandidate, b: ScoredCandidate, mode: FoodSearchMode): number {
+  if (mode === "cheapest") {
+    return (a.estimatedTotal ?? Number.POSITIVE_INFINITY) - (b.estimatedTotal ?? Number.POSITIVE_INFINITY);
+  }
+  return valueScore(a) - valueScore(b);
+}
+
+function valueScore(candidate: ScoredCandidate): number {
+  const total = candidate.estimatedTotal ?? Number.POSITIVE_INFINITY;
+  const rating = Number(candidate.rating);
+  const ratingPenalty = Number.isFinite(rating) ? Math.max(0, 4.3 - rating) * 80 : 40;
+  return total + ratingPenalty;
+}
+
 function dedupeCandidates(candidates: MenuCandidate[]): MenuCandidate[] {
   const seen = new Set<string>();
   const out: MenuCandidate[] = [];
@@ -288,9 +337,9 @@ function normalizePrice(value?: number): number | undefined {
   return value > 10_000 ? value / 100 : value;
 }
 
-function renderRecommendation(query: string, r: FoodRecommendation, count: number): string {
+function renderRecommendation(query: string, r: FoodRecommendation, ranked: ScoredCandidate[], mode: FoodSearchMode): string {
   const lines = [
-    `Best value I found for "${query}":`,
+    `${mode === "cheapest" ? "Cheapest match" : "Best value pick"} for "${query}":`,
     "",
     `${r.itemName ?? r.title}${r.restaurantName ? ` from ${r.restaurantName}` : ""}`,
     `Estimated total: ${formatMoney(r.estimatedTotal)}`,
@@ -299,6 +348,13 @@ function renderRecommendation(query: string, r: FoodRecommendation, count: numbe
   if (r.addOnSuggestion) lines.push(r.addOnSuggestion);
   if (r.eta) lines.push(`ETA: ${r.eta}`);
   if (r.rating) lines.push(`Rating: ${r.rating}`);
-  lines.push("", `Compared ${count} candidate items. Reply "confirm" to continue, or search another item.`);
+  const alternatives = ranked.slice(1, 4);
+  if (alternatives.length > 0) {
+    lines.push("", "Other options:");
+    for (const alt of alternatives) {
+      lines.push(`- ${alt.itemName ?? "Item"} from ${alt.restaurantName ?? "restaurant"} - ${formatMoney(alt.estimatedTotal)}${alt.rating ? `, rating ${alt.rating}` : ""}`);
+    }
+  }
+  lines.push("", `Compared ${ranked.length} candidate items. Reply "confirm" to continue, or search another item.`);
   return lines.join("\n");
 }

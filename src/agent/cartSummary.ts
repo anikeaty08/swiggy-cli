@@ -1,8 +1,14 @@
 import { deepFindArray, firstNumber, firstString, formatMoney } from "./jsonHeuristics.js";
 
-export function renderFoodCartSummary(payload: unknown): string {
+export interface CartSummaryFallback {
+  itemName?: string;
+  restaurantName?: string;
+  estimatedTotal?: number;
+}
+
+export function renderFoodCartSummary(payload: unknown, fallback: CartSummaryFallback = {}): string {
   const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-  const items = deepFindArray(payload, ["items", "cartItems", "lineItems"]) ?? [];
+  const items = findCartItemArrays(payload);
   const itemLines = items
     .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
     .map((item) => {
@@ -19,13 +25,57 @@ export function renderFoodCartSummary(payload: unknown): string {
     ? (record.availablePaymentMethods as unknown[]).filter((v): v is string => typeof v === "string")
     : [];
 
-  const lines = ["Cart review:"];
+  const lines = ["Cart:"];
   if (itemLines.length > 0) {
     lines.push(...itemLines);
+  } else if (fallback.itemName || fallback.restaurantName) {
+    lines.push(`${fallback.itemName ?? "Selected item"}${fallback.restaurantName ? ` from ${fallback.restaurantName}` : ""}`);
   } else {
-    lines.push("Swiggy accepted the cart request, but this MCP cart response did not include itemized cart lines.");
+    lines.push("Itemized cart lines were not included in this Swiggy MCP response.");
   }
-  if (amount !== undefined) lines.push(`Payable amount: ${formatMoney(amount)}`);
-  if (methods.length > 0) lines.push(`Payment methods: ${methods.join(", ")}`);
+  lines.push("");
+  lines.push("Payment:");
+  lines.push(`Method: ${methods.length > 0 ? methods.join(", ") : "not returned"}`);
+  lines.push(`Payable: ${amount !== undefined ? formatMoney(amount) : fallback.estimatedTotal !== undefined ? `${formatMoney(fallback.estimatedTotal)} estimated` : "not returned"}`);
+  lines.push(`Status: ${record.successful === true ? "cart request accepted" : "unknown"}`);
   return lines.join("\n");
+}
+
+function findCartItemArrays(payload: unknown): unknown[] {
+  const out: unknown[] = [];
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [payload];
+  const cartKeys = new Set(["items", "cartItems", "lineItems", "cart_items"]);
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        if (looksLikeCartItem(item)) out.push(item);
+        if (item && typeof item === "object") queue.push(item);
+      }
+      continue;
+    }
+    const record = current as Record<string, unknown>;
+    for (const [key, value] of Object.entries(record)) {
+      if (cartKeys.has(key) && Array.isArray(value)) {
+        out.push(...value.filter(looksLikeCartItem));
+      } else if (value && typeof value === "object") {
+        queue.push(value);
+      }
+    }
+  }
+  return out;
+}
+
+function looksLikeCartItem(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  const hasFoodName = firstString(record, ["name", "itemName", "title"]) !== undefined;
+  const hasCartSignal =
+    firstNumber(record, ["quantity", "qty", "price", "finalPrice", "itemTotal"]) !== undefined ||
+    firstString(record, ["itemId", "item_id", "skuId", "dishId"]) !== undefined;
+  const isPayment = firstString(record, ["groupName", "payment_code", "display_name", "group_name"]) !== undefined;
+  return hasFoodName && hasCartSignal && !isPayment;
 }

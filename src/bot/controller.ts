@@ -1,4 +1,4 @@
-import type { TelegramMessage, TelegramUserProfile } from "./types.js";
+import type { FoodRecommendation, FoodSearchMode, FoodSearchSession, TelegramCallbackQuery, TelegramMessage, TelegramUserProfile } from "./types.js";
 import { TelegramBotStore } from "./store.js";
 import { TelegramClient } from "./telegram.js";
 import { SwiggyCliExecutor } from "../agent/cliExecutor.js";
@@ -38,6 +38,7 @@ export class SwiggyTelegramBot {
       }
       for (const update of updates) {
         offset = update.update_id + 1;
+        if (update.callback_query) await this.handleCallback(update.callback_query);
         if (update.message) await this.handleMessage(update.message);
       }
       if (!opts.once) await sleep(500);
@@ -102,17 +103,67 @@ export class SwiggyTelegramBot {
         return;
       }
 
-      const query = parseFoodQuery(text);
-      if (query) {
+      const foodRequest = parseFoodQuery(text);
+      if (foodRequest) {
         const agent = new FoodAgent(this.executor(user));
-        const result = await agent.recommend(query, user);
-        if (result.plan) await this.store.updateUser(telegramUserId, { lastPlan: result.plan });
-        await this.client.sendMessage(chatId, result.reply);
+        const result = await agent.recommend(foodRequest.query, user, foodRequest.mode);
+        if (result.plan || result.search) {
+          await this.store.updateUser(telegramUserId, { lastPlan: result.plan, lastSearch: result.search });
+        }
+        await this.client.sendMessage(
+          chatId,
+          result.search ? renderSearchPage(result.search) : result.reply,
+          result.search ? searchKeyboard(result.search) : undefined
+        );
         return;
       }
 
       await this.client.sendMessage(chatId, "I can help with food orders. Try `order biryani`, `/addresses`, or `/status`.");
     } catch (err) {
+      await this.client.sendMessage(chatId, err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  private async handleCallback(callback: TelegramCallbackQuery): Promise<void> {
+    const data = callback.data ?? "";
+    const chatId = callback.message?.chat.id;
+    const messageId = callback.message?.message_id;
+    if (!chatId) return;
+
+    try {
+      const user = await this.store.getUser(callback.from.id);
+      if (!user.lastSearch) {
+        await this.client.answerCallbackQuery(callback.id, "Search expired. Send a food name again.");
+        return;
+      }
+
+      if (data.startsWith("food:page:")) {
+        const page = Number(data.slice("food:page:".length));
+        const nextSearch = clampSearchPage({ ...user.lastSearch, page });
+        await this.store.updateUser(callback.from.id, { lastSearch: nextSearch });
+        if (messageId) await this.client.editMessageText(chatId, messageId, renderSearchPage(nextSearch), searchKeyboard(nextSearch));
+        await this.client.answerCallbackQuery(callback.id);
+        return;
+      }
+
+      if (data.startsWith("food:add:")) {
+        const index = Number(data.slice("food:add:".length));
+        const option = user.lastSearch.options[index];
+        if (!option) {
+          await this.client.answerCallbackQuery(callback.id, "That item is no longer available in this result set.");
+          return;
+        }
+        const agent = new FoodAgent(this.executor(user));
+        const plan = agent.createPlan(user.lastSearch.query, user.lastSearch.addressId, option);
+        await this.store.updateUser(callback.from.id, { lastPlan: plan });
+        await this.client.answerCallbackQuery(callback.id, "Adding item to cart...");
+        await this.client.sendMessage(chatId, await agent.confirm(plan));
+        return;
+      }
+
+      await this.client.answerCallbackQuery(callback.id);
+    } catch (err) {
+      await this.client.answerCallbackQuery(callback.id, "Action failed");
       await this.client.sendMessage(chatId, err instanceof Error ? err.message : String(err));
     }
   }
@@ -171,11 +222,64 @@ export class SwiggyTelegramBot {
   }
 }
 
-function parseFoodQuery(text: string): string | undefined {
+const PAGE_SIZE = 4;
+
+function clampSearchPage(search: FoodSearchSession): FoodSearchSession {
+  const maxPage = Math.max(0, Math.ceil(search.options.length / PAGE_SIZE) - 1);
+  return { ...search, page: Math.min(Math.max(0, search.page), maxPage) };
+}
+
+function renderSearchPage(search: FoodSearchSession): string {
+  const current = clampSearchPage(search);
+  const pageCount = Math.max(1, Math.ceil(current.options.length / PAGE_SIZE));
+  const start = current.page * PAGE_SIZE;
+  const visible = current.options.slice(start, start + PAGE_SIZE);
+  const lines = [
+    `${current.mode === "cheapest" ? "Cheapest matches" : "Food matches"} for "${current.query}"`,
+    `Page ${current.page + 1}/${pageCount}`,
+    "",
+  ];
+  visible.forEach((item, offset) => {
+    lines.push(renderOption(start + offset + 1, item), "");
+  });
+  lines.push("Use Add buttons to add a specific item. Use next/prev to browse more.");
+  return lines.join("\n").trim();
+}
+
+function renderOption(index: number, item: FoodRecommendation): string {
+  const parts = [
+    `${index}. ${item.itemName ?? item.title}`,
+    item.restaurantName ? `from ${item.restaurantName}` : undefined,
+    item.estimatedTotal !== undefined ? `Rs ${Math.round(item.estimatedTotal)}` : undefined,
+    item.rating ? `rating ${item.rating}` : undefined,
+  ].filter(Boolean);
+  return parts.join("\n");
+}
+
+function searchKeyboard(search: FoodSearchSession): unknown {
+  const current = clampSearchPage(search);
+  const pageCount = Math.max(1, Math.ceil(current.options.length / PAGE_SIZE));
+  const start = current.page * PAGE_SIZE;
+  const visible = current.options.slice(start, start + PAGE_SIZE);
+  const rows = visible.map((_, offset) => [
+    {
+      text: `Add ${start + offset + 1}`,
+      callback_data: `food:add:${start + offset}`,
+    },
+  ]);
+  const nav = [];
+  if (current.page > 0) nav.push({ text: "Prev", callback_data: `food:page:${current.page - 1}` });
+  if (current.page < pageCount - 1) nav.push({ text: "Next", callback_data: `food:page:${current.page + 1}` });
+  if (nav.length > 0) rows.push(nav);
+  return { inline_keyboard: rows };
+}
+
+function parseFoodQuery(text: string): { query: string; mode: FoodSearchMode } | undefined {
   const normalized = text.trim();
+  const mode: FoodSearchMode = /^(?:cheapest|lowest|budget)\b/i.test(normalized) ? "cheapest" : "best_value";
   const match = normalized.match(/^(?:order|get|find|search|best|cheapest)\s+(.+)$/i);
-  if (match?.[1]) return match[1].replace(/\b(please|for me)\b/gi, "").trim();
-  if (normalized.length > 2 && !normalized.startsWith("/")) return normalized;
+  if (match?.[1]) return { query: match[1].replace(/\b(please|for me)\b/gi, "").trim(), mode };
+  if (normalized.length > 2 && !normalized.startsWith("/")) return { query: normalized, mode };
   return undefined;
 }
 
