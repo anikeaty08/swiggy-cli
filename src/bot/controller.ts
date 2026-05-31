@@ -76,11 +76,15 @@ export class SwiggyTelegramBot {
         return;
       }
       if (text === "/addresses") {
-        await this.client.sendMessage(chatId, await this.renderAddresses(user));
+        await this.client.sendMessage(chatId, await this.renderAddresses(user), undefined, "HTML");
         return;
       }
       if (text.startsWith("/location")) {
         await this.client.sendMessage(chatId, await this.setLocation(telegramUserId, text));
+        return;
+      }
+      if (text.startsWith("/address")) {
+        await this.client.sendMessage(chatId, await this.setManualAddress(telegramUserId, text));
         return;
       }
       if (text === "/cart") {
@@ -176,7 +180,13 @@ export class SwiggyTelegramBot {
     const status = await this.executor(user).authStatus();
     if (!status.ok) return `Auth status failed: ${status.error.code} ${status.error.message}`;
     const servers = deepFindArray(status.data, ["servers"]) ?? [];
-    const lines = ["Swiggy profile:", `SWIGGY_HOME: ${user.swiggyHome}`, `Address id: ${user.addressId ?? "not set"}`, ""];
+    const lines = [
+      "Swiggy profile:",
+      `SWIGGY_HOME: ${user.swiggyHome}`,
+      `Address id: ${user.addressId ?? "not set"}`,
+      `Manual address: ${user.manualAddress ?? "not set"}`,
+      "",
+    ];
     for (const row of servers) {
       if (!row || typeof row !== "object") continue;
       const record = row as Record<string, unknown>;
@@ -195,23 +205,54 @@ export class SwiggyTelegramBot {
     }
     const addresses = deepFindArray(res.data, ["addresses", "locations", "data"]) ?? [];
     const lines = ["Saved addresses:"];
-    for (const item of addresses) {
-      if (!item || typeof item !== "object") continue;
+    addresses.forEach((item, index) => {
+      if (!item || typeof item !== "object") return;
       const record = item as Record<string, unknown>;
       const id = firstString(record, ["address_id", "addressId", "id"]);
-      const label = firstString(record, ["display_address", "address", "name", "label", "title", "area"]);
-      if (id) lines.push(`${id} - ${label ?? "address"}`);
-    }
+      const line = firstString(record, ["addressLine", "display_address", "address", "formattedAddress"]);
+      const tag = firstString(record, ["addressTag", "addressCategory", "name", "label", "title"]);
+      const phone = firstString(record, ["phoneNumber", "phone"]);
+      if (id) {
+        lines.push(
+          "",
+          `<b>${index + 1}. ${escapeHtml(tag ?? "Address")}</b>`,
+          escapeHtml(line ?? "Address details not returned"),
+          phone ? `Phone: ${escapeHtml(phone)}` : "",
+          `<code>${escapeHtml(id)}</code>`
+        );
+      }
+    });
     if (lines.length === 1) lines.push("No saved addresses found.");
-    lines.push("", "Set one with `/location <addressId>`.");
+    lines.push("", "Set one with <b>/location addressId</b>.");
     return lines.join("\n");
   }
 
   private async setLocation(telegramUserId: number, text: string): Promise<string> {
-    const [, addressId] = text.split(/\s+/, 2);
-    if (!addressId) return "Use `/location <addressId>`. Run `/addresses` to list address ids.";
-    await this.store.updateUser(telegramUserId, { addressId, lastPlan: undefined });
-    return `Delivery address set to ${addressId}.`;
+    const value = text.replace(/^\/location\s*/i, "").trim();
+    if (!value) return "Use `/location <addressId>` for saved Swiggy addresses, or `/address <full address>` for manual text.";
+    if (looksLikeAddressId(value)) {
+      await this.store.updateUser(telegramUserId, { addressId: value, lastPlan: undefined });
+      return `Delivery address set to ${value}.`;
+    }
+    await this.store.updateUser(telegramUserId, { manualAddress: value, lastPlan: undefined });
+    return [
+      "Manual address saved.",
+      value,
+      "",
+      "For Swiggy Food actions I still need a saved Swiggy address id. Send `/addresses`, then `/location <addressId>`.",
+    ].join("\n");
+  }
+
+  private async setManualAddress(telegramUserId: number, text: string): Promise<string> {
+    const value = text.replace(/^\/address\s*/i, "").trim();
+    if (!value) return "Use `/address <full address>` to save address text.";
+    await this.store.updateUser(telegramUserId, { manualAddress: value, lastPlan: undefined });
+    return [
+      "Manual address saved.",
+      value,
+      "",
+      "Swiggy Food still requires one of your saved Swiggy address ids for search/cart. Use `/addresses` and `/location <addressId>`.",
+    ].join("\n");
   }
 
   private async renderCart(user: TelegramUserProfile): Promise<string> {
@@ -292,12 +333,21 @@ function helpText(user: TelegramUserProfile): string {
     "`/status` - check auth and selected address",
     "`/addresses` - list saved Swiggy addresses",
     "`/location <addressId>` - set delivery address",
+    "`/address <full address>` - save manual address text",
     "`order biryani` - find the best-value matching food item",
     "`/cart` - inspect cart",
     "`/cancel` - clear pending action",
     "",
     `Your isolated SWIGGY_HOME is ${user.swiggyHome}`,
   ].join("\n");
+}
+
+function looksLikeAddressId(value: string): boolean {
+  return /^[a-z0-9_-]{8,}$/i.test(value) && !/\s/.test(value);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function authText(executor: SwiggyCliExecutor, server: string): string {

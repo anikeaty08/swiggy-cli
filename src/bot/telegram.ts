@@ -19,20 +19,21 @@ export class TelegramClient {
     return data.result;
   }
 
-  async sendMessage(chatId: number, text: string, replyMarkup?: unknown): Promise<void> {
+  async sendMessage(chatId: number, text: string, replyMarkup?: unknown, parseMode?: "HTML"): Promise<void> {
     await this.request(new URL(`${this.baseUrl}/sendMessage`), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
         text,
+        parse_mode: parseMode,
         disable_web_page_preview: true,
         reply_markup: replyMarkup,
       }),
     });
   }
 
-  async editMessageText(chatId: number, messageId: number, text: string, replyMarkup?: unknown): Promise<void> {
+  async editMessageText(chatId: number, messageId: number, text: string, replyMarkup?: unknown, parseMode?: "HTML"): Promise<void> {
     await this.request(new URL(`${this.baseUrl}/editMessageText`), {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -40,6 +41,7 @@ export class TelegramClient {
         chat_id: chatId,
         message_id: messageId,
         text,
+        parse_mode: parseMode,
         disable_web_page_preview: true,
         reply_markup: replyMarkup,
       }),

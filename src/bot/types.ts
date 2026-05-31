@@ -39,6 +39,7 @@ export interface TelegramUserProfile {
   telegramUserId: number;
   swiggyHome: string;
   addressId?: string;
+  manualAddress?: string;
   city?: string;
   lastPlan?: PendingFoodPlan;
   lastSearch?: FoodSearchSession;
@@ -52,6 +53,12 @@ export interface PendingFoodPlan {
   addressId: string;
   createdAt: string;
   recommendation: FoodRecommendation;
+  items?: FoodPlanItem[];
+}
+
+export interface FoodPlanItem {
+  recommendation: FoodRecommendation;
+  quantity: number;
 }
 
 export interface FoodRecommendation {

@@ -1,4 +1,4 @@
-import type { FoodRecommendation, FoodSearchMode, FoodSearchSession, PendingFoodPlan, TelegramUserProfile } from "../bot/types.js";
+import type { FoodPlanItem, FoodRecommendation, FoodSearchMode, FoodSearchSession, PendingFoodPlan, TelegramUserProfile } from "../bot/types.js";
 import { SwiggyCliExecutor } from "./cliExecutor.js";
 import { renderFoodCartSummary } from "./cartSummary.js";
 import { deepFindArray, firstNumber, firstString, formatMoney } from "./jsonHeuristics.js";
@@ -19,16 +19,23 @@ export class FoodAgent {
           "Set a delivery address first.\n\nRun `/addresses` to list saved Swiggy addresses, then `/location <addressId>`.",
       };
     }
+    const addressId = user.addressId;
+
+    const composite = parseCompositeRequest(query);
+    if (composite.length > 1) {
+      const compositeResult = await this.recommendComposite(query, composite, user, mode);
+      if (compositeResult) return compositeResult;
+    }
 
     const search = await this.executor.call("food", "search_menu", {
       query,
-      addressId: user.addressId,
+      addressId,
     });
     if (!search.ok) return { reply: this.errorReply(search.error.code, search.error.message) };
 
     let candidates = extractMenuCandidates(search.data).slice(0, 8);
     if (candidates.length === 0) {
-      candidates = await this.restaurantMenuFallback(query, user.addressId);
+      candidates = await this.restaurantMenuFallback(query, addressId);
     }
     if (candidates.length === 0) {
       return { reply: `I could not find food items for "${query}" at the selected address.` };
@@ -45,7 +52,7 @@ export class FoodAgent {
     const plan: PendingFoodPlan = {
       kind: "food_order",
       query,
-      addressId: user.addressId,
+      addressId,
       createdAt: new Date().toISOString(),
       recommendation,
     };
@@ -76,7 +83,10 @@ export class FoodAgent {
   }
 
   async confirm(plan: PendingFoodPlan): Promise<string> {
-    const r = plan.recommendation;
+    const items = plan.items?.length ? plan.items : [{ recommendation: plan.recommendation, quantity: 1 }];
+    const added: string[] = [];
+    for (const item of items) {
+      const r = item.recommendation;
     if (!r.restaurantId || !r.itemId) {
       return "I found a recommendation, but the result did not include enough item IDs to safely build the cart. Open Swiggy manually or try a more specific item.";
     }
@@ -85,33 +95,97 @@ export class FoodAgent {
       addressId: plan.addressId,
       itemId: r.itemId,
       restaurantName: r.restaurantName,
-      quantity: 1,
+        quantity: item.quantity,
     });
     if (!add.ok) return `Could not update cart: ${add.error.code} ${add.error.message}`;
+      added.push(`${item.quantity} x ${r.itemName ?? r.itemId}`);
+    }
 
+    const primary = items[0]!.recommendation;
     let couponLine = "";
-    if (r.couponCode) {
-      const coupon = await this.executor.foodApplyCoupon(r.couponCode).catch(() => undefined);
+    if (primary.couponCode) {
+      const coupon = await this.executor.foodApplyCoupon(primary.couponCode).catch(() => undefined);
       couponLine = coupon?.ok
-        ? `\nCoupon applied: ${r.couponCode}`
-        : `\nCoupon ${r.couponCode} could not be applied automatically; check it before checkout.`;
+        ? `\nCoupon applied: ${primary.couponCode}`
+        : `\nCoupon ${primary.couponCode} could not be applied automatically; check it before checkout.`;
     }
 
     const cart = await this.executor.foodCart(plan.addressId);
     const cartText = cart.ok
       ? renderFoodCartSummary(cart.data, {
-          itemName: r.itemName,
-          restaurantName: r.restaurantName,
-          estimatedTotal: r.estimatedTotal,
+          itemName: added.join(", "),
+          restaurantName: primary.restaurantName,
+          estimatedTotal: sumPlanEstimate(items),
         })
       : `Could not fetch cart: ${cart.error.code} ${cart.error.message}`;
     return (
-      `Added to cart: ${r.itemName ?? r.itemId} from ${r.restaurantName ?? r.restaurantId}` +
+      `Added to cart:\n${added.join("\n")}` +
+      (primary.restaurantName ? `\nfrom ${primary.restaurantName}` : "") +
       couponLine +
       "\n\nReview the cart before checkout:\n" +
       cartText +
       "\n\nCheckout is not automatic. Place the order only after verifying the final total in Swiggy/CLI."
     );
+  }
+
+  private async recommendComposite(
+    query: string,
+    components: FoodComponent[],
+    user: TelegramUserProfile,
+    mode: FoodSearchMode
+  ): Promise<FoodAgentResult | undefined> {
+    if (!user.addressId) return undefined;
+    const addressId = user.addressId;
+    const restaurantQuery = components.map((c) => c.query).join(" ");
+    const restaurants = await this.executor.call("food", "search_restaurants", { query: restaurantQuery, addressId });
+    if (!restaurants.ok) return undefined;
+    const restaurantCandidates = extractRestaurantCandidates(restaurants.data).slice(0, 6);
+    const matches: Array<{ restaurant: MenuCandidate; items: FoodPlanItem[]; total: number; score: number }> = [];
+    for (const restaurant of restaurantCandidates) {
+      if (!restaurant.restaurantId) continue;
+      const menu = await this.executor
+        .call("food", "get_restaurant_menu", {
+          restaurantId: restaurant.restaurantId,
+          addressId,
+          page: 1,
+          pageSize: 10,
+        })
+        .catch(() => undefined);
+      if (!menu?.ok) continue;
+      const candidates = dedupeCandidates(extractMenuCandidates(menu.data, restaurant));
+      const planItems: FoodPlanItem[] = [];
+      for (const component of components) {
+        const match = bestComponentMatch(candidates, component, mode);
+        if (!match) break;
+        planItems.push({
+          recommendation: toRecommendation(component.query, scoreCandidate(match), undefined),
+          quantity: component.quantity,
+        });
+      }
+      if (planItems.length !== components.length) continue;
+      const total = sumPlanEstimate(planItems);
+      matches.push({
+        restaurant,
+        items: planItems,
+        total,
+        score: total + averageRatingPenalty(planItems),
+      });
+    }
+    const best = matches.sort((a, b) => (mode === "cheapest" ? a.total - b.total : a.score - b.score))[0];
+    if (!best) return undefined;
+    const primary = best.items[0]!.recommendation;
+    const plan: PendingFoodPlan = {
+      kind: "food_order",
+      query,
+      addressId,
+      createdAt: new Date().toISOString(),
+      recommendation: primary,
+      items: best.items,
+    };
+    return {
+      plan,
+      reply: renderCompositeRecommendation(query, best.items, best.restaurant.restaurantName, matches.length),
+    };
   }
 
   private errorReply(code: string, message: string): string {
@@ -147,6 +221,66 @@ export class FoodAgent {
       })
       .slice(0, 12);
   }
+}
+
+interface FoodComponent {
+  query: string;
+  quantity: number;
+  keywords: string[];
+}
+
+function parseCompositeRequest(query: string): FoodComponent[] {
+  const normalized = query
+    .toLowerCase()
+    .replace(/\b(kee|ki|ka|ke)\b/g, " ")
+    .replace(/\b(sabji|sabzi|sabjee)\b/g, "sabzi")
+    .replace(/\b(chappathi|chapathi|chapati)\b/g, "roti")
+    .replace(/\s+/g, " ")
+    .trim();
+  const parts = normalized
+    .split(/\s+(?:and|with|\+|aur)\s+/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return [];
+  return parts.map((part) => {
+    const quantityMatch = part.match(/^(\d+)\s+(.+)$/);
+    const quantity = quantityMatch ? Number(quantityMatch[1]) : 1;
+    const cleaned = (quantityMatch?.[2] ?? part).replace(/\b(of|plate|plates)\b/g, " ").replace(/\s+/g, " ").trim();
+    return {
+      query: cleaned,
+      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+      keywords: expandComponentKeywords(cleaned),
+    };
+  });
+}
+
+function expandComponentKeywords(query: string): string[] {
+  const tokens = query.split(/\s+/).filter((token) => !["sabzi", "curry", "gravy"].includes(token));
+  if (tokens.includes("roti")) return ["roti", "chapati", "phulka", "paratha", "tawa"];
+  if (tokens.includes("paneer")) return ["paneer"];
+  return tokens;
+}
+
+function bestComponentMatch(candidates: MenuCandidate[], component: FoodComponent, mode: FoodSearchMode): MenuCandidate | undefined {
+  const matches = candidates.filter((candidate) => {
+    const name = (candidate.itemName ?? "").toLowerCase();
+    return component.keywords.some((keyword) => name.includes(keyword));
+  });
+  return matches
+    .map((candidate) => scoreCandidate(candidate))
+    .sort((a, b) => compareCandidates(a, b, mode))[0];
+}
+
+function sumPlanEstimate(items: FoodPlanItem[]): number {
+  return items.reduce((sum, item) => sum + (item.recommendation.estimatedTotal ?? 0) * item.quantity, 0);
+}
+
+function averageRatingPenalty(items: FoodPlanItem[]): number {
+  if (items.length === 0) return 0;
+  return items.reduce((sum, item) => {
+    const rating = Number(item.recommendation.rating);
+    return sum + (Number.isFinite(rating) ? Math.max(0, 4.3 - rating) * 80 : 40);
+  }, 0) / items.length;
 }
 
 interface MenuCandidate {
@@ -356,5 +490,26 @@ function renderRecommendation(query: string, r: FoodRecommendation, ranked: Scor
     }
   }
   lines.push("", `Compared ${ranked.length} candidate items. Reply "confirm" to continue, or search another item.`);
+  return lines.join("\n");
+}
+
+function renderCompositeRecommendation(
+  query: string,
+  items: FoodPlanItem[],
+  restaurantName: string | undefined,
+  restaurantCount: number
+): string {
+  const lines = [
+    `Meal match for "${query}":`,
+    restaurantName ? `Restaurant: ${restaurantName}` : undefined,
+    "",
+  ].filter((line): line is string => line !== undefined);
+  for (const item of items) {
+    lines.push(
+      `${item.quantity} x ${item.recommendation.itemName ?? item.recommendation.title} - ${formatMoney(item.recommendation.estimatedTotal)} each`
+    );
+  }
+  lines.push("", `Estimated item total: ${formatMoney(sumPlanEstimate(items))}`);
+  lines.push(`Matched complete meal at ${restaurantCount} restaurant${restaurantCount === 1 ? "" : "s"}. Reply "confirm" to add all items.`);
   return lines.join("\n");
 }
