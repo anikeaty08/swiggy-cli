@@ -4,11 +4,14 @@ import type { OutputOptions, ServerName } from "../types/index.js";
 import { getCurrentProfile } from "../lib/config.js";
 import { McpClient, extractToolPayload } from "../lib/mcp.js";
 import { renderError, renderResult, startSpinner, brand } from "../lib/output.js";
+import { readFile } from "node:fs/promises";
 import { CliError } from "../lib/errors.js";
 import { UsageError } from "../lib/errors.js";
 import { confirm } from "../lib/confirm.js";
 import { DESTRUCTIVE_TOOLS } from "../lib/aliases.js";
 import { isMachineMode } from "../lib/tty.js";
+import { validateToolInput } from "../lib/schema.js";
+import { renderToolHuman } from "../lib/renderers/toolHuman.js";
 
 export function attachOutputOptions(cmd: Command): Command {
   return cmd
@@ -46,7 +49,7 @@ export async function resolveExecOpts(cmd: Command): Promise<ExecOpts> {
     plain: explicitOutput ? Boolean(raw.plain) : profile.output === "plain",
     raw: Boolean(raw.raw),
     quiet: Boolean(raw.quiet),
-    noInteractive: Boolean(raw.noInteractive),
+    noInteractive: Boolean(raw.noInteractive || profile.noInteractive),
     yes: Boolean(raw.yes),
     profile: raw.profile || name,
   };
@@ -60,6 +63,10 @@ export async function callTool(
   humanRenderer?: (data: unknown, ctx: ExecOpts & { server?: string; tool?: string }) => void
 ): Promise<void> {
   try {
+    const validation = validateToolInput(server, tool, args);
+    if (!validation.ok) {
+      throw new UsageError(`Invalid arguments for ${server}/${tool}: ${validation.errors.join("; ")}`);
+    }
     if (DESTRUCTIVE_TOOLS.has(tool)) {
       await confirm(`Run destructive tool "${tool}" on ${server}`, opts);
     }
@@ -78,7 +85,7 @@ export async function callTool(
       throw new CliError("MCP_ERROR", message, { details: result, hint: hintForToolError(server, tool, message) });
     }
     const payload = opts.raw ? result : extractToolPayload(result);
-    renderResult(payload, ctx, humanRenderer as never);
+    renderResult(payload, ctx, (humanRenderer ?? renderToolHuman) as never);
   } catch (err) {
     const code = renderError(err, { ...opts, server, tool });
     process.exitCode = code;
@@ -93,6 +100,12 @@ export function parseJsonInput(input: string, flagName = "--input"): unknown {
   }
 }
 
+export async function parseJsonInputOrFile(input: string | undefined, inputFile: string | undefined): Promise<unknown> {
+  if (inputFile) return parseJsonInput(await readFile(inputFile, "utf8"), "--input-file");
+  if (input) return parseJsonInput(input);
+  return {};
+}
+
 interface PromptAddressOptions {
   requiredBy: string;
 }
@@ -104,13 +117,15 @@ export async function ensureAddressId(
   promptOpts: PromptAddressOptions
 ): Promise<string> {
   if (currentAddressId) return currentAddressId;
+  const { profile } = await getCurrentProfile(opts.profile);
+  const profileAddress = profile.defaultAddressIds?.[server];
+  if (profileAddress) return profileAddress;
   if (isMachineMode(opts)) {
     throw new UsageError(
       `Missing address id for ${promptOpts.requiredBy}. Run: swiggy ${server} addresses, then retry with --address-id <id>.`,
       `Run: swiggy ${server} addresses, then pass --address-id <id>`
     );
   }
-  const { profile } = await getCurrentProfile(opts.profile);
   const client = new McpClient({ server, profile });
   const result = await client.callTool("get_addresses", {});
   const payload = extractToolPayload(result);

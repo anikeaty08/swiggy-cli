@@ -17,7 +17,7 @@ node dist/cli.js --help   # smoke-test the built binary
 
 ## Project layout
 
-See [`wiki/architecture.md`](./wiki/architecture.md). One-line summary: `src/cli.ts` is the commander entry, every command lives under `src/commands/`, and every command compiles down to a single `McpClient.callTool()` invocation defined in `src/lib/mcp.ts`.
+See [`docs/architecture.md`](./docs/architecture.md). One-line summary: `src/cli.ts` is the commander entry, every command lives under `src/commands/`, and every command compiles down to a single `McpClient.callTool()` invocation defined in `src/lib/mcp.ts`.
 
 ## Adding an ergonomic command
 
@@ -27,14 +27,14 @@ The Swiggy MCP servers expose 35 tools today. Any new tool can be invoked throug
 2. Append `<verb>: <tool_name>` to `ERGONOMIC_ALIASES[<server>]`.
 3. Add a `attachOutputOptions(<server>.command(...))` block in [`src/commands/<server>.ts`](./src/commands).
 4. If the tool mutates state in a hard-to-reverse way, add it to `DESTRUCTIVE_TOOLS`.
-5. Add a row to [`wiki/commands.md`](./wiki/commands.md).
+5. Add a row to [`docs/commands.md`](./docs/commands.md).
 6. Update tests in [`test/smoke.test.ts`](./test/smoke.test.ts) — alias-integrity assertions catch typos.
 
-Full guide: [`wiki/extending.md`](./wiki/extending.md).
+Full guide: [`docs/extending.md`](./docs/extending.md).
 
 ## Output contract
 
-Every command must produce a structured envelope before rendering. The JSON shape is documented in [`wiki/output-contract.md`](./wiki/output-contract.md) and **must not change** in a backwards-incompatible way without a major version bump. New optional fields under `meta` are fine.
+Every command must produce a structured envelope before rendering. The JSON shape is documented in [`docs/output-contract.md`](./docs/output-contract.md) and **must not change** in a backwards-incompatible way without a major version bump. New optional fields under `meta` are fine.
 
 ## Coding style
 
@@ -55,12 +55,12 @@ Conventional commits are encouraged:
 ```
 feat(food): add `add-to-cart --variation` flag
 fix(auth): refresh token on 401 instead of failing
-docs(wiki): expand troubleshooting for windows path
+docs: expand troubleshooting for windows path
 ```
 
 ## Releasing
 
-Maintainers only. See [`wiki/releasing.md`](./wiki/releasing.md) — tag-based, runs `release.yml` which publishes to npm with provenance.
+Maintainers only. See [`docs/releasing.md`](./docs/releasing.md) - tag-based, runs `release.yml` which publishes to npm with provenance.
 
 ## Code of conduct
 

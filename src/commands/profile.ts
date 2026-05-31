@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { attachOutputOptions, resolveExecOpts } from "./common.js";
 import { renderError, renderResult } from "../lib/output.js";
-import { listProfiles, useProfile, createProfile, deleteProfile, setProfileField } from "../lib/profiles.js";
+import { listProfiles, useProfile, createProfile, deleteProfile, setProfileValue } from "../lib/profiles.js";
 
 export function buildProfileCommands(program: Command): void {
   const p = program.command("profile").description("Manage profiles (city, defaults, output mode)");
@@ -17,6 +17,8 @@ export function buildProfileCommands(program: Command): void {
           defaultCity: prof.defaultCity ?? "",
           defaultServer: prof.defaultServer ?? "",
           output: prof.output ?? "human",
+          noInteractive: Boolean(prof.noInteractive),
+          activeEndpointEnvironment: prof.activeEndpointEnvironment ?? "",
         }));
         renderResult(flat, opts);
       } catch (err) {
@@ -69,11 +71,11 @@ export function buildProfileCommands(program: Command): void {
   attachOutputOptions(
     p
       .command("set <name> <key> <value>")
-      .description("Set a field on a profile (e.g. defaultCity, output, defaultServer)")
+      .description("Set a profile field (defaultCity, output, noInteractive, endpoints.food, defaultAddressIds.food)")
       .action(async (name: string, key: string, value: string) => {
         const opts = await resolveExecOpts(p);
         try {
-          await setProfileField(name, key as never, value as never);
+          await setProfileValue(name, key, value);
           renderResult({ updated: { name, key, value } }, opts);
         } catch (err) {
           process.exitCode = renderError(err, opts);

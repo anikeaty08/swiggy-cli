@@ -63,6 +63,7 @@ export const TOOL_CATALOG: Record<ServerName, readonly string[]> = {
 export const ERGONOMIC_ALIASES: Record<ServerName, Record<string, string>> = {
   food: {
     "search-restaurants": "search_restaurants",
+    restaurants: "search_restaurants",
     "search-menu": "search_menu",
     menu: "get_restaurant_menu",
     addresses: "get_addresses",
@@ -71,6 +72,7 @@ export const ERGONOMIC_ALIASES: Record<ServerName, Record<string, string>> = {
     "clear-cart": "flush_food_cart",
     "apply-coupon": "apply_food_coupon",
     "list-coupons": "fetch_food_coupons",
+    coupons: "fetch_food_coupons",
     checkout: "place_food_order",
     orders: "get_food_orders",
     order: "get_food_order_details",
@@ -94,6 +96,7 @@ export const ERGONOMIC_ALIASES: Record<ServerName, Record<string, string>> = {
   },
   dineout: {
     search: "search_restaurants_dineout",
+    restaurants: "search_restaurants_dineout",
     details: "get_restaurant_details",
     locations: "get_saved_locations",
     cart: "create_cart",

@@ -16,7 +16,7 @@ Without skills, an agent has to re-derive all of that from the README every time
 ## Installing into an agent
 
 ```bash
-npx skills add HKTITAN/swiggy-cli
+npx skills add anikeaty08/swiggy-cli
 ```
 
 The CLI lists discovered skills, asks which to install and which agents to target (Claude, Cursor, Codex, etc.), then symlinks or copies them into the agent's skills directory. See [skills.sh docs](https://skills.sh/docs).
@@ -24,13 +24,13 @@ The CLI lists discovered skills, asks which to install and which agents to targe
 To install a single skill:
 
 ```bash
-npx skills add HKTITAN/swiggy-cli -s swiggy-cli
+npx skills add anikeaty08/swiggy-cli -s swiggy-cli
 ```
 
 To target a specific agent:
 
 ```bash
-npx skills add HKTITAN/swiggy-cli -a claude-code
+npx skills add anikeaty08/swiggy-cli -a claude-code
 ```
 
 ## What's in this repo
@@ -55,4 +55,4 @@ If you add a skill:
 - Cross-link siblings using relative links (`../<other>/SKILL.md`).
 - Keep under ~3000 tokens — agents may load several at once.
 
-Then update [`wiki/skills.md`](./skills.md) (this file) so the table stays accurate.
+Then update [`docs/skills.md`](./skills.md) (this file) so the table stays accurate.

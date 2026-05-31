@@ -1,6 +1,14 @@
 import { Command } from "commander";
 import { UsageError } from "../lib/errors.js";
-import { attachOutputOptions, callTool, ensureDineoutLocation, parseJsonInput, resolveExecOpts } from "./common.js";
+import { attachOutputOptions, callTool, ensureDineoutLocation, parseJsonInput, parseJsonInputOrFile, resolveExecOpts } from "./common.js";
+import {
+  buildDineoutDetailsPayload,
+  buildDineoutSearchPayload,
+  buildDineoutSlotsPayload,
+  buildDineoutStatusPayload,
+  stripUndefined,
+  toNumber,
+} from "../lib/payloads.js";
 
 export function buildDineoutCommands(program: Command): void {
   const d = program.command("dineout").description("Swiggy Dineout: discover restaurants, slots, bookings");
@@ -8,6 +16,7 @@ export function buildDineoutCommands(program: Command): void {
   attachOutputOptions(
     d
       .command("search")
+      .alias("restaurants")
       .description("Search Dineout restaurants")
       .option("-q, --query <q>", "search query")
       .option("--entity-type <type>", "optional filter type: locality|CUISINE|RESTAURANT_CATEGORY")
@@ -21,7 +30,7 @@ export function buildDineoutCommands(program: Command): void {
         }
         const location = await ensureDineoutLocation(
           opts,
-          strip({
+          stripUndefined({
             addressId: o.addressId,
             latitude: o.lat !== undefined ? toNumber(o.lat, "--lat") : undefined,
             longitude: o.lng !== undefined ? toNumber(o.lng, "--lng") : undefined,
@@ -31,7 +40,7 @@ export function buildDineoutCommands(program: Command): void {
         await callTool(
           "dineout",
           "search_restaurants_dineout",
-          strip({ query: o.query, entityType: o.entityType, ...location }),
+          buildDineoutSearchPayload({ query: o.query, entityType: o.entityType, ...location }),
           opts
         );
       })
@@ -47,7 +56,7 @@ export function buildDineoutCommands(program: Command): void {
         await callTool(
           "dineout",
           "get_restaurant_details",
-          { restaurantId: id, latitude: toNumber(o.lat, "--lat"), longitude: toNumber(o.lng, "--lng") },
+          buildDineoutDetailsPayload({ restaurantId: id, lat: o.lat, lng: o.lng }),
           await resolveExecOpts(d)
         );
       })
@@ -80,12 +89,7 @@ export function buildDineoutCommands(program: Command): void {
         await callTool(
           "dineout",
           "get_available_slots",
-          {
-            restaurantId: o.restaurantId,
-            date: o.date,
-            latitude: toNumber(o.lat, "--lat"),
-            longitude: toNumber(o.lng, "--lng"),
-          },
+          buildDineoutSlotsPayload(o),
           await resolveExecOpts(d)
         );
       })
@@ -96,8 +100,14 @@ export function buildDineoutCommands(program: Command): void {
       .command("cart")
       .description("Create a Dineout booking cart")
       .option("--input <json>", "raw arguments JSON", "{}")
-      .action(async (o: { input?: string }) => {
-        await callTool("dineout", "create_cart", parseJsonInput(o.input || "{}"), await resolveExecOpts(d));
+      .option("--input-file <path>", "read raw arguments JSON from a file")
+      .action(async (o: { input?: string; inputFile?: string }) => {
+        await callTool(
+          "dineout",
+          "create_cart",
+          o.inputFile ? await parseJsonInputOrFile(o.input, o.inputFile) : parseJsonInput(o.input || "{}"),
+          await resolveExecOpts(d)
+        );
       })
   );
 
@@ -106,8 +116,14 @@ export function buildDineoutCommands(program: Command): void {
       .command("book")
       .description("Book a table (destructive)")
       .option("--input <json>", "booking payload JSON", "{}")
-      .action(async (o: { input?: string }) => {
-        await callTool("dineout", "book_table", parseJsonInput(o.input || "{}"), await resolveExecOpts(d));
+      .option("--input-file <path>", "read booking payload JSON from a file")
+      .action(async (o: { input?: string; inputFile?: string }) => {
+        await callTool(
+          "dineout",
+          "book_table",
+          o.inputFile ? await parseJsonInputOrFile(o.input, o.inputFile) : parseJsonInput(o.input || "{}"),
+          await resolveExecOpts(d)
+        );
       })
   );
 
@@ -116,24 +132,7 @@ export function buildDineoutCommands(program: Command): void {
       .command("status <orderId>")
       .description("Get the status of a booking")
       .action(async (id: string) => {
-        await callTool("dineout", "get_booking_status", { orderId: id }, await resolveExecOpts(d));
+        await callTool("dineout", "get_booking_status", buildDineoutStatusPayload(id), await resolveExecOpts(d));
       })
   );
-}
-
-function strip<T extends Record<string, unknown>>(o: T): Partial<T> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(o)) if (v !== undefined && v !== "") out[k] = v;
-  return out as Partial<T>;
-}
-
-function toNumber(value: string | undefined, flagName: string): number {
-  if (value === undefined) {
-    throw new UsageError(`Missing required option ${flagName}.`);
-  }
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new UsageError(`Invalid ${flagName}. It must be a number.`);
-  }
-  return parsed;
 }

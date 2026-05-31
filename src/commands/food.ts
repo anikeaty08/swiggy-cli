@@ -1,6 +1,14 @@
 import { Command } from "commander";
 import { UsageError } from "../lib/errors.js";
-import { attachOutputOptions, callTool, ensureAddressId, parseJsonInput, resolveExecOpts } from "./common.js";
+import { attachOutputOptions, callTool, ensureAddressId, parseJsonInputOrFile, resolveExecOpts } from "./common.js";
+import {
+  buildFoodAddToCartPayload,
+  buildFoodCheckoutPayload,
+  buildFoodMenuPayload,
+  stripUndefined,
+  toNonNegativeInteger,
+  toPositiveInteger,
+} from "../lib/payloads.js";
 
 export function buildFoodCommands(program: Command): void {
   const food = program.command("food").description("Swiggy Food: search, menus, cart, orders");
@@ -8,6 +16,7 @@ export function buildFoodCommands(program: Command): void {
   attachOutputOptions(
     food
       .command("search-restaurants")
+      .alias("restaurants")
       .description("Search restaurants by query or cuisine")
       .option("-q, --query <q>", "search query (e.g. 'biryani')")
       .option("--address-id <id>", "delivery address id")
@@ -73,17 +82,7 @@ export function buildFoodCommands(program: Command): void {
         }
         const opts = await resolveExecOpts(food);
         const addressId = await ensureAddressId("food", opts, o.addressId, { requiredBy: "food menu" });
-        await callTool(
-          "food",
-          "get_restaurant_menu",
-          stripUndefined({
-            restaurantId: o.restaurantId,
-            addressId,
-            page: toPositiveInteger(o.page, "--page"),
-            pageSize: toPositiveInteger(o.pageSize, "--page-size"),
-          }),
-          opts
-        );
+        await callTool("food", "get_restaurant_menu", buildFoodMenuPayload({ ...o, addressId }), opts);
       })
   );
 
@@ -119,6 +118,7 @@ export function buildFoodCommands(program: Command): void {
       .option("--quantity <n>", "quantity", "1")
       .option("--restaurant-name <name>", "restaurant name for display context")
       .option("--input <json>", "raw arguments JSON (overrides flags)")
+      .option("--input-file <path>", "read raw arguments JSON from a file")
       .action(
         async (o: {
           restaurantId?: string;
@@ -127,28 +127,16 @@ export function buildFoodCommands(program: Command): void {
           quantity?: string;
           restaurantName?: string;
           input?: string;
+          inputFile?: string;
         }) => {
-          if (!o.input && (!o.restaurantId || !o.itemId)) {
-            throw new UsageError(
-              "Missing required options for add-to-cart.",
-              "Provide --restaurant-id and --item-id, or pass --input <json>"
-            );
-          }
-          if (!o.input && o.quantity && Number(o.quantity) <= 0) {
-            throw new UsageError("Invalid --quantity. It must be a positive number.");
-          }
           const opts = await resolveExecOpts(food);
-          const addressId = o.input
+          const addressId = o.input || o.inputFile
             ? undefined
             : await ensureAddressId("food", opts, o.addressId, { requiredBy: "food add-to-cart" });
-          const args = o.input
-            ? parseJsonInput(o.input)
-            : stripUndefined({
-                restaurantId: o.restaurantId,
-                addressId,
-                restaurantName: o.restaurantName,
-                cartItems: [{ itemId: o.itemId, quantity: o.quantity ? Number(o.quantity) : 1 }],
-              });
+          const args =
+            o.input || o.inputFile
+              ? await parseJsonInputOrFile(o.input, o.inputFile)
+              : buildFoodAddToCartPayload({ ...o, addressId: addressId! });
           await callTool("food", "update_food_cart", args, opts);
         }
       )
@@ -166,6 +154,7 @@ export function buildFoodCommands(program: Command): void {
   attachOutputOptions(
     food
       .command("list-coupons")
+      .alias("coupons")
       .description("List available food coupons")
       .action(async () => {
         await callTool("food", "fetch_food_coupons", {}, await resolveExecOpts(food));
@@ -188,12 +177,16 @@ export function buildFoodCommands(program: Command): void {
       .option("--address-id <id>", "delivery address id")
       .option("--payment-method <method>", "payment method from get_food_cart")
       .option("--input <json>", "raw arguments JSON")
-      .action(async (o: { addressId?: string; paymentMethod?: string; input?: string }) => {
+      .option("--input-file <path>", "read raw arguments JSON from a file")
+      .action(async (o: { addressId?: string; paymentMethod?: string; input?: string; inputFile?: string }) => {
         const opts = await resolveExecOpts(food);
-        const addressId = o.input
+        const addressId = o.input || o.inputFile
           ? undefined
           : await ensureAddressId("food", opts, o.addressId, { requiredBy: "food checkout" });
-        const args = o.input ? parseJsonInput(o.input) : stripUndefined({ addressId, paymentMethod: o.paymentMethod });
+        const args =
+          o.input || o.inputFile
+            ? await parseJsonInputOrFile(o.input, o.inputFile)
+            : buildFoodCheckoutPayload({ addressId: addressId!, paymentMethod: o.paymentMethod });
         await callTool("food", "place_food_order", args, opts);
       })
   );
@@ -233,28 +226,4 @@ export function buildFoodCommands(program: Command): void {
         await callTool("food", "track_food_order", { orderId: id }, await resolveExecOpts(food));
       })
   );
-}
-
-function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) if (v !== undefined && v !== "") out[k] = v;
-  return out as Partial<T>;
-}
-
-function toPositiveInteger(value: string | undefined, flagName: string): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new UsageError(`Invalid ${flagName}. It must be a positive integer.`);
-  }
-  return parsed;
-}
-
-function toNonNegativeInteger(value: string | undefined, flagName: string): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new UsageError(`Invalid ${flagName}. It must be a non-negative integer.`);
-  }
-  return parsed;
 }

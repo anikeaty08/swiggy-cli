@@ -1,5 +1,15 @@
 # Releasing
 
+## Checklist
+
+1. Update the package version.
+2. Update `CHANGELOG.md`.
+3. Run `npm run lint`.
+4. Run `npm test`.
+5. Run `npm run build`.
+6. Run `npm run pack:check`.
+7. Publish with npm provenance enabled: `npm publish --provenance`.
+
 Releases are tag-driven. Pushing a tag matching `v*.*.*` triggers `.github/workflows/release.yml`, which:
 
 1. Installs deps with a clean `npm ci`.
@@ -41,10 +51,11 @@ Per `files` in `package.json` and `.npmignore`:
 - `dist/` (built JS only)
 - `README.md`
 - `AGENTS.md`
-- `wiki/`
+- `docs/`
+- `skills/`
 - `LICENSE`
 
-`src/`, `test/`, `tsconfig.json`, `tsup.config.ts`, `.github/`, and the `skills/` directory are deliberately excluded — they live on GitHub. Run `npm pack --dry-run` before tagging to verify.
+`src/`, `test/`, `tsconfig.json`, `tsup.config.ts`, and `.github/` are deliberately excluded. Run `npm pack --dry-run` before tagging to verify.
 
 ## Pre-releases
 

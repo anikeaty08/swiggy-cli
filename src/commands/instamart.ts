@@ -1,6 +1,13 @@
 import { Command } from "commander";
 import { UsageError } from "../lib/errors.js";
-import { attachOutputOptions, callTool, ensureAddressId, parseJsonInput, resolveExecOpts } from "./common.js";
+import { attachOutputOptions, callTool, ensureAddressId, parseJsonInput, parseJsonInputOrFile, resolveExecOpts } from "./common.js";
+import {
+  buildInstamartAddToCartPayload,
+  buildInstamartCheckoutPayload,
+  buildInstamartTrackPayload,
+  stripUndefined,
+  toNonNegativeInteger,
+} from "../lib/payloads.js";
 
 export function buildInstamartCommands(program: Command): void {
   const im = program.command("instamart").description("Swiggy Instamart: groceries, cart, checkout");
@@ -21,7 +28,7 @@ export function buildInstamartCommands(program: Command): void {
         await callTool(
           "instamart",
           "search_products",
-          strip({ query: o.query, addressId, offset: toNonNegativeInteger(o.offset, "--offset") }),
+          stripUndefined({ query: o.query, addressId, offset: toNonNegativeInteger(o.offset, "--offset") }),
           opts
         );
       })
@@ -84,23 +91,16 @@ export function buildInstamartCommands(program: Command): void {
       .option("--spin-id <id>", "variant spinId from search results")
       .option("--quantity <n>", "quantity", "1")
       .option("--input <json>", "raw arguments JSON")
-      .action(async (o: { addressId?: string; spinId?: string; quantity?: string; input?: string }) => {
-        if (!o.input && !o.spinId) {
-          throw new UsageError("Missing required option --spin-id.", "Provide --spin-id or pass --input <json>");
-        }
-        if (!o.input && o.quantity && Number(o.quantity) <= 0) {
-          throw new UsageError("Invalid --quantity. It must be a positive number.");
-        }
+      .option("--input-file <path>", "read raw arguments JSON from a file")
+      .action(async (o: { addressId?: string; spinId?: string; quantity?: string; input?: string; inputFile?: string }) => {
         const opts = await resolveExecOpts(im);
-        const addressId = o.input
+        const addressId = o.input || o.inputFile
           ? undefined
           : await ensureAddressId("instamart", opts, o.addressId, { requiredBy: "instamart add-to-cart" });
-        const args = o.input
-          ? parseJsonInput(o.input)
-          : {
-              selectedAddressId: addressId,
-              items: [{ spinId: o.spinId, quantity: o.quantity ? Number(o.quantity) : 1 }],
-            };
+        const args =
+          o.input || o.inputFile
+            ? await parseJsonInputOrFile(o.input, o.inputFile)
+            : buildInstamartAddToCartPayload({ addressId: addressId!, spinId: o.spinId, quantity: o.quantity });
         await callTool("instamart", "update_cart", args, opts);
       })
   );
@@ -121,12 +121,16 @@ export function buildInstamartCommands(program: Command): void {
       .option("--address-id <id>", "delivery address id")
       .option("--payment-method <method>", "payment method from get_cart")
       .option("--input <json>", "raw arguments JSON")
-      .action(async (o: { addressId?: string; paymentMethod?: string; input?: string }) => {
+      .option("--input-file <path>", "read raw arguments JSON from a file")
+      .action(async (o: { addressId?: string; paymentMethod?: string; input?: string; inputFile?: string }) => {
         const opts = await resolveExecOpts(im);
-        const addressId = o.input
+        const addressId = o.input || o.inputFile
           ? undefined
           : await ensureAddressId("instamart", opts, o.addressId, { requiredBy: "instamart checkout" });
-        const args = o.input ? parseJsonInput(o.input) : strip({ addressId, paymentMethod: o.paymentMethod });
+        const args =
+          o.input || o.inputFile
+            ? await parseJsonInputOrFile(o.input, o.inputFile)
+            : buildInstamartCheckoutPayload({ addressId: addressId!, paymentMethod: o.paymentMethod });
         await callTool("instamart", "checkout", args, opts);
       })
   );
@@ -159,35 +163,9 @@ export function buildInstamartCommands(program: Command): void {
         await callTool(
           "instamart",
           "track_order",
-          { orderId: id, lat: toNumber(o.lat, "--lat"), lng: toNumber(o.lng, "--lng") },
+          buildInstamartTrackPayload({ orderId: id, lat: o.lat, lng: o.lng }),
           await resolveExecOpts(im)
         );
       })
   );
-}
-
-function strip<T extends Record<string, unknown>>(o: T): Partial<T> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(o)) if (v !== undefined && v !== "") out[k] = v;
-  return out as Partial<T>;
-}
-
-function toNonNegativeInteger(value: string | undefined, flagName: string): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new UsageError(`Invalid ${flagName}. It must be a non-negative integer.`);
-  }
-  return parsed;
-}
-
-function toNumber(value: string | undefined, flagName: string): number {
-  if (value === undefined) {
-    throw new UsageError(`Missing required option ${flagName}.`);
-  }
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new UsageError(`Invalid ${flagName}. It must be a number.`);
-  }
-  return parsed;
 }
