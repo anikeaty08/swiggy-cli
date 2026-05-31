@@ -29,6 +29,7 @@ The result is a CLI that feels practical in a shell and dependable inside an age
 - Search Dineout restaurants, inspect details, fetch reservation slots, and check booking status
 - Discover live tools and schemas directly from Swiggy MCP
 - Return a stable machine envelope with `--json`
+- Run a Telegram food-ordering agent on top of isolated per-user CLI profiles
 
 ## Command Model
 
@@ -337,6 +338,7 @@ Additional docs live in [`docs/`](./docs):
 - `docs/auth.md`
 - `docs/commands.md`
 - `docs/output-contract.md`
+- `docs/telegram-bot.md`
 - `docs/troubleshooting.md`
 
 ## License
