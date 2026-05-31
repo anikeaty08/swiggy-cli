@@ -26,7 +26,15 @@ export class SwiggyTelegramBot {
   async start(opts: { once?: boolean } = {}): Promise<void> {
     let offset: number | undefined;
     do {
-      const updates = await this.client.getUpdates(offset);
+      let updates;
+      try {
+        updates = await this.client.getUpdates(offset);
+      } catch (err) {
+        if (opts.once) throw err;
+        process.stderr.write(`Telegram polling error: ${err instanceof Error ? err.message : String(err)}\n`);
+        await sleep(5_000);
+        continue;
+      }
       for (const update of updates) {
         offset = update.update_id + 1;
         if (update.message) await this.handleMessage(update.message);
