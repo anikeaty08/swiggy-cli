@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CliEnvelope, ServerName } from "../types/index.js";
@@ -72,10 +72,12 @@ export class SwiggyCliExecutor {
   }
 
   authCommand(server = "food"): string {
+    const target = this.resolveCommand();
+    const cli = [quote(target.file), ...target.prefixArgs.map(quote), "auth", "init", "--server", server].join(" ");
     if (process.platform === "win32") {
-      return `$env:SWIGGY_HOME="${this.swiggyHome}"; swiggy auth init --server ${server}`;
+      return `$env:SWIGGY_HOME=${quote(this.swiggyHome)}; ${cli}`;
     }
-    return `SWIGGY_HOME="${this.swiggyHome}" swiggy auth init --server ${server}`;
+    return `SWIGGY_HOME=${quote(this.swiggyHome)} ${cli}`;
   }
 
   private async run(args: string[]): Promise<CliEnvelope> {
@@ -99,8 +101,18 @@ export class SwiggyCliExecutor {
   private resolveCommand(): { file: string; prefixArgs: string[] } {
     if (this.command) return { file: this.command, prefixArgs: [] };
     const here = dirname(fileURLToPath(import.meta.url));
-    const distCli = resolve(here, "..", "cli.js");
+    const currentModule = fileURLToPath(import.meta.url);
+    if (basename(currentModule) === "cli.js" && existsSync(currentModule)) {
+      return { file: process.execPath, prefixArgs: [currentModule] };
+    }
+    const sameDirCli = resolve(here, "cli.js");
+    if (existsSync(sameDirCli)) return { file: process.execPath, prefixArgs: [sameDirCli] };
+    const distCli = resolve(here, "..", "..", "dist", "cli.js");
     if (existsSync(distCli)) return { file: process.execPath, prefixArgs: [distCli] };
     return { file: "swiggy", prefixArgs: [] };
   }
+}
+
+function quote(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
 }
