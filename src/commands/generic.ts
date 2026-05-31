@@ -109,14 +109,26 @@ export function buildGenericCommands(program: Command): void {
             }
           } catch (err) {
             if (err instanceof CliError && (err.code === "USAGE" || err.code === "NOT_FOUND")) throw err;
+            const reason = err instanceof Error ? err.message : String(err);
             const warning = `Could not validate ${server}/${tool} against live schema; calling tool anyway.`;
             if (opts.json || opts.raw) {
-              callOpts = { ...opts, warnings: [warning] };
+              callOpts = {
+                ...opts,
+                warnings: [warning],
+                meta: {
+                  schemaValidation: {
+                    status: "skipped",
+                    server,
+                    tool,
+                    reason,
+                  },
+                },
+              };
             } else if (!opts.quiet) {
               process.stderr.write(`warning: ${warning}\n`);
             }
           }
-          await callTool(server, tool, args, callOpts);
+          await callTool(server, tool, args, { ...callOpts, skipCachedValidation: true });
         } catch (err) {
           process.exitCode = renderError(err, { ...opts, server, tool });
         }

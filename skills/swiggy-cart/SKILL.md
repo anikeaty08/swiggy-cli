@@ -1,9 +1,11 @@
----
+﻿---
 name: swiggy-cart
 description: Inspect or mutate the user's Swiggy food / Instamart cart through swiggy-cli. Use when the user says "add X to my cart", "what's in my cart", or "clear the cart".
 ---
 
-# swiggy-cart
+# 🍽️ swiggy-cart
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Cart commands are split per server because food and groceries are physically separate carts upstream.
 
@@ -14,7 +16,7 @@ swiggy food cart --json --no-interactive
 swiggy instamart cart --json --no-interactive
 ```
 
-`data` is the upstream cart object — items, totals, applied coupons. Always read before any mutation so you can tell the human what's about to change.
+`data` is the upstream cart object â€” items, totals, applied coupons. Always read before any mutation so you can tell the human what's about to change.
 
 ## Mutate
 

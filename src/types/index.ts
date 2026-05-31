@@ -35,6 +35,7 @@ export interface OutputOptions {
   yes?: boolean;
   profile?: string;
   warnings?: string[];
+  meta?: Record<string, unknown>;
 }
 
 export interface McpTool {

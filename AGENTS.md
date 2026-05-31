@@ -1,20 +1,22 @@
-# AGENTS.md
+﻿# 🍽️ AGENTS.md
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 > Guidance for AI agents and automations using the `swiggy` CLI.
 > Format follows the [agents.md](https://agents.md/) convention.
 
 ## Mission
 
-`swiggy` is a deterministic wrapper over Swiggy's three MCP servers (Food, Instamart, Dineout). It is intended to be used the same way an agent would use any other tool: pass arguments, read structured JSON, react to a stable error envelope and exit code. **Do not parse human prose** — always run the CLI in machine mode.
+`swiggy` is a deterministic wrapper over Swiggy's three MCP servers (Food, Instamart, Dineout). It is intended to be used the same way an agent would use any other tool: pass arguments, read structured JSON, react to a stable error envelope and exit code. **Do not parse human prose** â€” always run the CLI in machine mode.
 
 ## Run modes
 
 Always pass these flags when scripting:
 
-- `--json` — receive the canonical envelope on stdout, nothing else.
-- `--no-interactive` — never prompt; fail fast.
-- `--yes` — explicitly acknowledge destructive actions.
-- `--quiet` — suppress non-essential logs.
+- `--json` â€” receive the canonical envelope on stdout, nothing else.
+- `--no-interactive` â€” never prompt; fail fast.
+- `--yes` â€” explicitly acknowledge destructive actions.
+- `--quiet` â€” suppress non-essential logs.
 
 Example:
 
@@ -44,7 +46,7 @@ Failure:
 
 The shape is stable. New optional fields may be added under `meta`; do not assume `meta` is empty.
 
-## Error codes → exit codes
+## Error codes â†’ exit codes
 
 
 | `error.code`                    | exit |
@@ -64,7 +66,7 @@ Branch on `error.code`, not on the message string.
 
 ## Preferred command surface
 
-For agents, prefer **Layer B (generic)** — it's stable across upstream tool renames:
+For agents, prefer **Layer B (generic)** â€” it's stable across upstream tool renames:
 
 ```bash
 swiggy servers --json
@@ -77,9 +79,9 @@ Use **Layer A (ergonomic)** only when you are confident in the alias mapping (se
 
 ## Discovery flow
 
-1. `swiggy servers --json` → list the three servers and current endpoints.
-2. `swiggy tools <server> --json` → live `tools/list`.
-3. `swiggy schema <server> <tool> --json` → live JSON Schema for arguments.
+1. `swiggy servers --json` â†’ list the three servers and current endpoints.
+2. `swiggy tools <server> --json` â†’ live `tools/list`.
+3. `swiggy schema <server> <tool> --json` â†’ live JSON Schema for arguments.
 4. Build arguments validated against that schema, then `swiggy call <server> <tool> --input '<json>'`.
 
 Never hard-code parameter names; always read them from the schema.
@@ -103,13 +105,13 @@ For headless environments, the operator may pre-provision tokens by setting:
 
 - These tools place real orders. `place_food_order`, `checkout`, `book_table`, `flush_food_cart`, `clear_cart`, and `delete_address` are gated. Without `--yes` in non-interactive mode they exit `7` (`CONFIRMATION_REQUIRED`).
 - COD orders are not reversible via the MCP API. Always confirm cart state with `swiggy food cart --json` (or `instamart cart`) before checkout.
-- The upstream manifest warns against using the Swiggy mobile app concurrently — it can invalidate the agent's session.
+- The upstream manifest warns against using the Swiggy mobile app concurrently â€” it can invalidate the agent's session.
 
 ## Idempotency & retries
 
 - Read tools (`search_*`, `get_*`, `track_*`) are safe to retry.
 - Mutation tools (`update_*_cart`, `apply_food_coupon`) are **not** idempotent unless the upstream tool documents it. Treat retries as additive.
-- `place_food_order`, `book_table`, `checkout` should never be retried automatically on `MCP_ERROR` — escalate to the human.
+- `place_food_order`, `book_table`, `checkout` should never be retried automatically on `MCP_ERROR` â€” escalate to the human.
 
 ## Networking
 
@@ -123,8 +125,8 @@ To add a new ergonomic verb when Swiggy ships a new tool, edit `src/lib/aliases.
 
 ## Where the CLI keeps state
 
-- `~/.swiggy/config.json` — profiles, defaults, endpoint overrides.
-- `~/.swiggy/auth.json` — OAuth tokens, mode `0600`.
+- `~/.swiggy/config.json` â€” profiles, defaults, endpoint overrides.
+- `~/.swiggy/auth.json` â€” OAuth tokens, mode `0600`.
 - Override base path with `SWIGGY_HOME`.
 
 Both files are JSON; agents may inspect them but should not write directly. Use `swiggy config show --json` and `swiggy auth status --json`.

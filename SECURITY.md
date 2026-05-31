@@ -1,4 +1,6 @@
-# Security policy
+﻿# 🍽️ Security policy
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 ## Supported versions
 
@@ -12,7 +14,7 @@ We're pre-1.0. Once 1.0 ships, the latest minor will be supported, plus the prev
 
 **Do not open a public issue.** Instead:
 
-- Use [GitHub's private vulnerability reporting](https://github.com/HKTITAN/swiggy-cli/security/advisories/new) — preferred.
+- Use [GitHub's private vulnerability reporting](https://github.com/anikeaty08/swiggy-cli/security/advisories/new) - preferred.
 - Or reach the maintainer through a private channel listed on the repo profile.
 
 Please include:
@@ -30,5 +32,5 @@ We aim to acknowledge within **3 business days** and ship a fix or coordinated d
 
 ## Out of scope
 
-- Vulnerabilities in upstream Swiggy MCP servers themselves — file at <https://github.com/Swiggy/swiggy-mcp-server-manifest>.
-- Vulnerabilities in third-party dependencies that don't affect a default `swiggy-cli` install — file with that project.
+- Vulnerabilities in upstream Swiggy MCP servers themselves â€” file at <https://github.com/Swiggy/swiggy-mcp-server-manifest>.
+- Vulnerabilities in third-party dependencies that don't affect a default `swiggy-cli` install â€” file with that project.

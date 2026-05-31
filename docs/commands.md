@@ -1,8 +1,10 @@
-# Commands
+﻿# 🍽️ Commands
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`, `--no-interactive`, `-y/--yes`, `--profile <name>`.
 
-## Generic (Layer B — agent-preferred)
+## Generic (Layer B â€” agent-preferred)
 
 
 | Command                                   | What it does                                              |
@@ -24,10 +26,10 @@ Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`,
 | `swiggy food addresses`                 | `get_addresses`          |
 | `swiggy food cart`                      | `get_food_cart`          |
 | `swiggy food add-to-cart`               | `update_food_cart`       |
-| `swiggy food clear-cart`                | `flush_food_cart` ⚠      |
+| `swiggy food clear-cart`                | `flush_food_cart` âš       |
 | `swiggy food list-coupons`              | `fetch_food_coupons`     |
 | `swiggy food apply-coupon <code>`       | `apply_food_coupon`      |
-| `swiggy food checkout`                  | `place_food_order` ⚠     |
+| `swiggy food checkout`                  | `place_food_order` âš      |
 | `swiggy food orders`                    | `get_food_orders`        |
 | `swiggy food order <id>`                | `get_food_order_details` |
 | `swiggy food track <id>`                | `track_food_order`       |
@@ -42,11 +44,11 @@ Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`,
 | `swiggy instamart go-to-items`         | `your_go_to_items`  |
 | `swiggy instamart addresses`           | `get_addresses`     |
 | `swiggy instamart create-address`      | `create_address`    |
-| `swiggy instamart delete-address <id>` | `delete_address` ⚠  |
+| `swiggy instamart delete-address <id>` | `delete_address` âš   |
 | `swiggy instamart cart`                | `get_cart`          |
 | `swiggy instamart add-to-cart`         | `update_cart`       |
-| `swiggy instamart clear-cart`          | `clear_cart` ⚠      |
-| `swiggy instamart checkout`            | `checkout` ⚠        |
+| `swiggy instamart clear-cart`          | `clear_cart` âš       |
+| `swiggy instamart checkout`            | `checkout` âš         |
 | `swiggy instamart orders`              | `get_orders`        |
 | `swiggy instamart order <id>`          | `get_order_details` |
 | `swiggy instamart track <id>`          | `track_order`       |
@@ -62,7 +64,7 @@ Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`,
 | `swiggy dineout locations`          | `get_saved_locations`        |
 | `swiggy dineout slots`              | `get_available_slots`        |
 | `swiggy dineout cart`               | `create_cart`                |
-| `swiggy dineout book`               | `book_table` ⚠               |
+| `swiggy dineout book`               | `book_table` âš                |
 | `swiggy dineout status <bookingId>` | `get_booking_status`         |
 
 
@@ -82,7 +84,8 @@ Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`,
 | `swiggy profile create <name> [opts]`     | new profile                               |
 | `swiggy profile delete <name>`            | remove profile (cannot delete `default`)  |
 | `swiggy profile set <name> <key> <value>` | tweak a profile field                     |
-| `swiggy doctor`                           | full self-check — exits non-zero on issue |
+| `swiggy doctor`                           | full self-check â€” exits non-zero on issue |
+| `swiggy completion [shell]`               | print shell completion setup              |
 
 
-⚠ = destructive. Requires `--yes` in non-interactive mode (exit `7` otherwise).
+Destructive commands require `--yes` in non-interactive mode (exit `7` otherwise). In human mode, destructive commerce commands print a best-effort summary before asking for confirmation.

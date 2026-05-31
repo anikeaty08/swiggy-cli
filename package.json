@@ -4,7 +4,7 @@
   "description": "Human- and agent-friendly CLI for the official Swiggy MCP servers (food, instamart, dineout).",
   "type": "module",
   "license": "MIT",
-  "author": "swiggy-cli contributors",
+  "author": "anikeaty08/swiggy-cli maintainers",
   "homepage": "https://github.com/anikeaty08/swiggy-cli",
   "repository": {
     "type": "git",

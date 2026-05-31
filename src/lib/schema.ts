@@ -10,6 +10,7 @@ type JsonSchema = {
 
 export const SCHEMA_FIXTURES: Record<ServerName, Record<string, JsonSchema>> = {
   food: {
+    get_addresses: objectSchema([], {}),
     get_restaurant_menu: objectSchema(["restaurantId", "addressId"], {
       restaurantId: { type: "string" },
       addressId: { type: "string" },
@@ -32,8 +33,58 @@ export const SCHEMA_FIXTURES: Record<ServerName, Record<string, JsonSchema>> = {
       addressId: { type: "string" },
       paymentMethod: { type: "string" },
     }),
+    search_menu: objectSchema(["query", "addressId"], {
+      query: { type: "string" },
+      addressId: { type: "string" },
+      restaurantIdOfAddedItem: { type: "string" },
+      vegFilter: { type: "number" },
+      offset: { type: "number" },
+    }),
+    search_restaurants: objectSchema(["query", "addressId"], {
+      query: { type: "string" },
+      addressId: { type: "string" },
+      offset: { type: "number" },
+    }),
+    apply_food_coupon: objectSchema(["code"], {
+      code: { type: "string" },
+    }),
+    fetch_food_coupons: objectSchema([], {}),
+    flush_food_cart: objectSchema([], {}),
+    get_food_cart: objectSchema(["addressId"], {
+      addressId: { type: "string" },
+      restaurantName: { type: "string" },
+    }),
+    get_food_order_details: objectSchema(["orderId"], {
+      orderId: { type: "string" },
+    }),
+    get_food_orders: objectSchema(["addressId"], {
+      addressId: { type: "string" },
+      orderCount: { type: "number" },
+    }),
+    track_food_order: objectSchema(["orderId"], {
+      orderId: { type: "string" },
+    }),
+    report_error: objectSchema([], {
+      message: { type: "string" },
+      details: { type: "object" },
+    }),
   },
   instamart: {
+    create_address: objectSchema([], {}),
+    delete_address: objectSchema(["addressId"], {
+      addressId: { type: "string" },
+    }),
+    get_addresses: objectSchema([], {}),
+    search_products: objectSchema(["query", "addressId"], {
+      query: { type: "string" },
+      addressId: { type: "string" },
+      offset: { type: "number" },
+    }),
+    your_go_to_items: objectSchema(["addressId"], {
+      addressId: { type: "string" },
+    }),
+    clear_cart: objectSchema([], {}),
+    get_cart: objectSchema([], {}),
     update_cart: objectSchema(["selectedAddressId", "items"], {
       selectedAddressId: { type: "string" },
       items: {
@@ -53,8 +104,17 @@ export const SCHEMA_FIXTURES: Record<ServerName, Record<string, JsonSchema>> = {
       lat: { type: "number" },
       lng: { type: "number" },
     }),
+    get_order_details: objectSchema(["orderId"], {
+      orderId: { type: "string" },
+    }),
+    get_orders: objectSchema([], {}),
+    report_error: objectSchema([], {
+      message: { type: "string" },
+      details: { type: "object" },
+    }),
   },
   dineout: {
+    get_saved_locations: objectSchema([], {}),
     search_restaurants_dineout: objectSchema(["query"], {
       query: { type: "string" },
       entityType: { type: "string" },
@@ -75,6 +135,12 @@ export const SCHEMA_FIXTURES: Record<ServerName, Record<string, JsonSchema>> = {
     }),
     get_booking_status: objectSchema(["orderId"], {
       orderId: { type: "string" },
+    }),
+    book_table: objectSchema([], {}),
+    create_cart: objectSchema([], {}),
+    report_error: objectSchema([], {
+      message: { type: "string" },
+      details: { type: "object" },
     }),
   },
 };

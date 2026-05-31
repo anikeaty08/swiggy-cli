@@ -1,14 +1,16 @@
----
+﻿---
 name: swiggy-dineout-booking
 description: Discover Swiggy Dineout restaurants, check available reservation slots, and book a table via swiggy-cli. Use when the user asks "book a table at X" or "is Y free at 8pm tomorrow".
 ---
 
-# swiggy-dineout-booking
+# 🍽️ swiggy-dineout-booking
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Reservations go through the `dineout` server. The flow is:
 
 ```
-search → details → slots → cart → book → status
+search â†’ details â†’ slots â†’ cart â†’ book â†’ status
 ```
 
 ## 1. Search
@@ -41,7 +43,7 @@ Present the slots and let the human choose one.
 swiggy dineout cart --input '{"restaurant_id":"<id>","slot_id":"<slot>","guests":2}' --json
 ```
 
-## 5. Book (destructive — requires explicit confirmation)
+## 5. Book (destructive â€” requires explicit confirmation)
 
 ```bash
 swiggy dineout book --input '{"slot_id":"<slot>","guests":2,"restaurant_id":"<id>"}' --yes --json --no-interactive

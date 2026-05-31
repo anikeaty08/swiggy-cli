@@ -1,4 +1,6 @@
-# Auth
+﻿# 🍽️ Auth
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Swiggy MCP servers use OAuth 2.0 over HTTPS. Per the manifest at [https://github.com/Swiggy/swiggy-mcp-server-manifest](https://github.com/Swiggy/swiggy-mcp-server-manifest), whitelisted redirect URIs cover Claude/ChatGPT/VS Code; CLI tools use a loopback redirect.
 
@@ -6,7 +8,7 @@ Swiggy MCP servers use OAuth 2.0 over HTTPS. Per the manifest at [https://github
 
 1. **Discovery.** `GET <server>/.well-known/oauth-authorization-server` (RFC 8414). Yields `authorization_endpoint` and `token_endpoint`.
 2. **Client.** Swiggy MCP **does not support** RFC 7591 dynamic client registration. You must provide a pre-registered `client_id` via `--client-id` or `SWIGGY_OAUTH_CLIENT_ID`. The official manifest at [https://github.com/Swiggy/swiggy-mcp-server-manifest](https://github.com/Swiggy/swiggy-mcp-server-manifest) lists which clients (and redirect URIs) are whitelisted.
-3. **Redirect URI.** The CLI binds an ephemeral loopback port and uses `http://127.0.0.1:<port>/callback` (or `http://localhost:<port>/callback` with `--redirect-host localhost`). Both bare hosts are whitelisted server-side; per RFC 8252 §7.3 any port on the loopback host matches.
+3. **Redirect URI.** The CLI binds an ephemeral loopback port and uses `http://127.0.0.1:<port>/callback` (or `http://localhost:<port>/callback` with `--redirect-host localhost`). Both bare hosts are whitelisted server-side; per RFC 8252 Â§7.3 any port on the loopback host matches.
 4. **Authorization.** PKCE S256. The CLI prints the URL to stderr, opens it in the user's browser if possible, and listens on the loopback port.
 5. **Code exchange.** Standard `authorization_code` grant.
 6. **Storage.** Tokens go to `~/.swiggy/auth.json` with mode `0600`:

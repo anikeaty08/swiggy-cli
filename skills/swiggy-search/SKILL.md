@@ -1,9 +1,11 @@
----
+﻿---
 name: swiggy-search
 description: Search restaurants, menu items, grocery products, or dineout venues on Swiggy via the swiggy-cli. Use when a user asks "find me X on Swiggy" or "what biryani places are open near me".
 ---
 
-# swiggy-search
+# 🍽️ swiggy-search
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Discovery on Swiggy spans three servers. Pick by intent:
 
@@ -29,11 +31,11 @@ Discovery on Swiggy spans three servers. Pick by intent:
 2. If you don't know the parameter names, run `swiggy schema <server> <tool> --json` first.
 3. Run the search.
 4. Parse `data` and present a concise top-N list with name, rating, and id.
-5. Hand control back — do not auto-call `add-to-cart` or `book` from a search step.
+5. Hand control back â€” do not auto-call `add-to-cart` or `book` from a search step.
 
 ## Example
 
 ```bash
 swiggy food search-restaurants -q biryani -c Delhi --json --no-interactive
-# → { "ok": true, "data": [ ... ], "meta": { "profile": "default" } }
+# â†’ { "ok": true, "data": [ ... ], "meta": { "profile": "default" } }
 ```

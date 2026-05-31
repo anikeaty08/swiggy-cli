@@ -9,6 +9,7 @@ import { runWhoami } from "./commands/auth.js";
 import { buildConfigCommands } from "./commands/config.js";
 import { buildProfileCommands } from "./commands/profile.js";
 import { buildDoctorCommand } from "./commands/doctor.js";
+import { buildBotCommands } from "./commands/bot.js";
 import { attachOutputOptions, readGlobalOpts, resolveExecOpts } from "./commands/common.js";
 import { renderError, renderStartupBanner } from "./lib/output.js";
 import { CliError, UsageError } from "./lib/errors.js";
@@ -46,6 +47,7 @@ program
       `  $ swiggy schema food search_restaurants\n` +
       `  $ swiggy call food search_restaurants --input '{"query":"pizza"}'\n` +
       `  $ swiggy auth init --server food\n` +
+      `  $ swiggy bot telegram --token "$TELEGRAM_BOT_TOKEN"\n` +
       `  $ swiggy doctor\n\n` +
       `Docs: see README.md and ./docs/`
   );
@@ -58,6 +60,27 @@ buildAuthCommands(program);
 buildConfigCommands(program);
 buildProfileCommands(program);
 buildDoctorCommand(program);
+buildBotCommands(program);
+
+program
+  .command("completion")
+  .description("Print shell completion setup for bash, zsh, or fish")
+  .argument("[shell]", "shell: bash|zsh|fish", "bash")
+  .action((shell: string) => {
+    if (shell === "bash") {
+      process.stdout.write('complete -W "$(swiggy --help | sed -n \'s/^  \\([a-z][^ ]*\\).*/\\1/p\')" swiggy\n');
+      return;
+    }
+    if (shell === "zsh") {
+      process.stdout.write("#compdef swiggy\n_arguments '1:command:($(swiggy --help | sed -n \"s/^  \\([a-z][^ ]*\\).*/\\1/p\"))'\n");
+      return;
+    }
+    if (shell === "fish") {
+      process.stdout.write("complete -c swiggy -f -a '(swiggy --help | string match -r \"^  [a-z].*\" | string split \" \" -f 3)'\n");
+      return;
+    }
+    throw new UsageError(`Unknown shell "${shell}".`, "Use: swiggy completion bash|zsh|fish");
+  });
 
 attachOutputOptions(
   program

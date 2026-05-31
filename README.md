@@ -1,4 +1,6 @@
-# swiggy-cli
+﻿# 🍽️ swiggy-cli
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Terminal-grade access to Swiggy's MCP platform.
 
@@ -27,6 +29,7 @@ The result is a CLI that feels practical in a shell and dependable inside an age
 - Search Dineout restaurants, inspect details, fetch reservation slots, and check booking status
 - Discover live tools and schemas directly from Swiggy MCP
 - Return a stable machine envelope with `--json`
+- Run a Telegram food-ordering agent on top of isolated per-user CLI profiles
 
 ## Command Model
 
@@ -225,6 +228,16 @@ swiggy profile use work
 swiggy --profile work food addresses
 ```
 
+## Shell Completion
+
+Generate shell completion setup:
+
+```bash
+swiggy completion bash
+swiggy completion zsh
+swiggy completion fish
+```
+
 ## Safety
 
 This CLI is wired to real commerce actions. It should behave like it.
@@ -237,6 +250,8 @@ These commands require confirmation in normal use, or `--yes` in machine mode:
 - `instamart clear-cart`
 - `instamart checkout`
 - `dineout book`
+
+In human mode, checkout, booking, cart clearing, and address deletion print a best-effort summary before asking for confirmation.
 
 Operational rules:
 
@@ -252,6 +267,7 @@ Scripts:
 npm run build
 npm run lint
 npm test
+npm run pack:check
 ```
 
 Run locally:
@@ -322,6 +338,7 @@ Additional docs live in [`docs/`](./docs):
 - `docs/auth.md`
 - `docs/commands.md`
 - `docs/output-contract.md`
+- `docs/telegram-bot.md`
 - `docs/troubleshooting.md`
 
 ## License

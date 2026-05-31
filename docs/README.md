@@ -1,24 +1,26 @@
-# swiggy-cli docs
+﻿# 🍽️ swiggy-cli docs
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 These docs are the durable, deeply-linked knowledge base for the project. They are written for two audiences:
 
 - **Humans** browsing on GitHub.
 - **Agents** that load these markdown files into context.
 
-Each page is self-contained, named after a single concept, and short enough to fit comfortably in a model's context window. Pages link out to source files at canonical paths (`src/lib/...`) so a reader can jump from concept → implementation in one click.
+Each page is self-contained, named after a single concept, and short enough to fit comfortably in a model's context window. Pages link out to source files at canonical paths (`src/lib/...`) so a reader can jump from concept â†’ implementation in one click.
 
 ## Index
 
-1. [Architecture](./architecture.md) — how the layers fit together.
-2. [Commands](./commands.md) — every command, what it does, what it maps to.
-3. [Tools catalog](./tools-catalog.md) — verbatim list of upstream MCP tools.
-4. [Output contract](./output-contract.md) — JSON envelope, exit codes, error codes.
-5. [Auth](./auth.md) — OAuth flow, token storage, refresh.
-6. [MCP protocol notes](./mcp-protocol-notes.md) — transport, headers, manual replay.
-7. [Skills](./skills.md) — agent-skills shipped from this repo and how to install them.
-8. [Extending](./extending.md) — adding new commands or supporting new servers.
-9. [Releasing](./releasing.md) — tag-based publish flow.
-10. [Troubleshooting](./troubleshooting.md) — common failures and fixes.
+1. [Architecture](./architecture.md) â€” how the layers fit together.
+2. [Commands](./commands.md) â€” every command, what it does, what it maps to.
+3. [Tools catalog](./tools-catalog.md) â€” verbatim list of upstream MCP tools.
+4. [Output contract](./output-contract.md) â€” JSON envelope, exit codes, error codes.
+5. [Auth](./auth.md) â€” OAuth flow, token storage, refresh.
+6. [MCP protocol notes](./mcp-protocol-notes.md) â€” transport, headers, manual replay.
+7. [Skills](./skills.md) â€” agent-skills shipped from this repo and how to install them.
+8. [Extending](./extending.md) â€” adding new commands or supporting new servers.
+9. [Releasing](./releasing.md) â€” tag-based publish flow.
+10. [Troubleshooting](./troubleshooting.md) â€” common failures and fixes.
 
 ## External references
 

@@ -1,17 +1,19 @@
-# Contributing to swiggy-cli
+﻿# 🍽️ Contributing to swiggy-cli
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Thanks for considering a contribution! This is a community CLI for the official [Swiggy MCP servers](https://github.com/Swiggy/swiggy-mcp-server-manifest); upstream behavior changes belong on their tracker, but anything about how this CLI wraps them belongs here.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/HKTITAN/swiggy-cli.git
+git clone https://github.com/anikeaty08/swiggy-cli.git
 cd swiggy-cli
 npm ci
 npm run dev -- --help     # tsx-powered watcher equivalent
 npm test                  # vitest
 npm run lint              # tsc --noEmit
-npm run build             # tsup → dist/
+npm run build             # tsup â†’ dist/
 node dist/cli.js --help   # smoke-test the built binary
 ```
 
@@ -28,7 +30,7 @@ The Swiggy MCP servers expose 35 tools today. Any new tool can be invoked throug
 3. Add a `attachOutputOptions(<server>.command(...))` block in [`src/commands/<server>.ts`](./src/commands).
 4. If the tool mutates state in a hard-to-reverse way, add it to `DESTRUCTIVE_TOOLS`.
 5. Add a row to [`docs/commands.md`](./docs/commands.md).
-6. Update tests in [`test/smoke.test.ts`](./test/smoke.test.ts) — alias-integrity assertions catch typos.
+6. Update tests in [`test/smoke.test.ts`](./test/smoke.test.ts) â€” alias-integrity assertions catch typos.
 
 Full guide: [`docs/extending.md`](./docs/extending.md).
 
@@ -46,7 +48,7 @@ Every command must produce a structured envelope before rendering. The JSON shap
 ## Tests
 
 - `vitest` smoke tests are in `test/smoke.test.ts`. They verify alias integrity, error contract, and renderer determinism.
-- Network-touching code is not unit-tested in CI (it would require a live Swiggy account). Manual smoke against a real account is preferred.
+- Network-touching code is covered with mocked MCP/auth tests in CI. Manual smoke against a real account is still recommended before release.
 
 ## Commit style
 

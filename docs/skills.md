@@ -1,4 +1,6 @@
-# Agent skills
+﻿# 🍽️ Agent skills
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 This repo ships [skills.sh](https://skills.sh)-compatible agent skills under [`skills/`](../skills/). Each skill is a single `SKILL.md` file with YAML frontmatter (`name`, `description`) followed by markdown instructions for an agent.
 
@@ -35,12 +37,12 @@ npx skills add anikeaty08/swiggy-cli -a claude-code
 
 ## What's in this repo
 
-| Skill                          | Use when…                                                  |
+| Skill                          | Use whenâ€¦                                                  |
 | ------------------------------ | ---------------------------------------------------------- |
-| `swiggy-cli`                   | master skill — installed first, links to the rest          |
+| `swiggy-cli`                   | master skill â€” installed first, links to the rest          |
 | `swiggy-search`                | "find me X on Swiggy"                                      |
 | `swiggy-cart`                  | "what's in my cart" / "add X to my cart" / "clear cart"    |
-| `swiggy-checkout`              | "place the order" — gated, requires explicit human consent |
+| `swiggy-checkout`              | "place the order" â€” gated, requires explicit human consent |
 | `swiggy-dineout-booking`       | "book a table at X for Friday"                             |
 | `swiggy-track`                 | "where's my order" / "show recent orders"                  |
 
@@ -48,11 +50,11 @@ npx skills add anikeaty08/swiggy-cli -a claude-code
 
 If you add a skill:
 
-- Keep it scoped — one user-intent, one skill. Don't conflate search + cart.
+- Keep it scoped â€” one user-intent, one skill. Don't conflate search + cart.
 - Lead with **when to use** so the agent's router can dispatch quickly.
 - List **hard rules** before steps. Especially destructive-action rules.
 - Always include a literal example command line with `--json --no-interactive`.
 - Cross-link siblings using relative links (`../<other>/SKILL.md`).
-- Keep under ~3000 tokens — agents may load several at once.
+- Keep under ~3000 tokens â€” agents may load several at once.
 
 Then update [`docs/skills.md`](./skills.md) (this file) so the table stays accurate.
