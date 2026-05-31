@@ -1,30 +1,51 @@
-import type { FoodRecommendation, PendingFoodPlan, TelegramUserProfile } from "../bot/types.js";
+import type {
+  FoodDiscountSummary,
+  FoodMealOption,
+  FoodPlanItem,
+  FoodRecommendation,
+  FoodSearchMode,
+  FoodSearchSession,
+  PendingFoodPlan,
+  TelegramUserProfile,
+} from "../bot/types.js";
 import { SwiggyCliExecutor } from "./cliExecutor.js";
+import { renderFoodCartSummary } from "./cartSummary.js";
 import { deepFindArray, firstNumber, firstString, formatMoney } from "./jsonHeuristics.js";
 
 export interface FoodAgentResult {
   reply: string;
   plan?: PendingFoodPlan;
+  search?: FoodSearchSession;
 }
 
 export class FoodAgent {
   constructor(private readonly executor: SwiggyCliExecutor) {}
 
-  async recommend(query: string, user: TelegramUserProfile): Promise<FoodAgentResult> {
+  async recommend(query: string, user: TelegramUserProfile, mode: FoodSearchMode = "best_value"): Promise<FoodAgentResult> {
     if (!user.addressId) {
       return {
         reply:
           "Set a delivery address first.\n\nRun `/addresses` to list saved Swiggy addresses, then `/location <addressId>`.",
       };
     }
+    const addressId = user.addressId;
+
+    const composite = parseCompositeRequest(query);
+    if (composite.length > 1) {
+      const compositeResult = await this.recommendComposite(query, composite, user, mode);
+      if (compositeResult) return compositeResult;
+    }
 
     const search = await this.executor.call("food", "search_menu", {
       query,
-      addressId: user.addressId,
+      addressId,
     });
     if (!search.ok) return { reply: this.errorReply(search.error.code, search.error.message) };
 
-    const candidates = extractMenuCandidates(search.data).slice(0, 8);
+    let candidates = extractMenuCandidates(search.data).slice(0, 8);
+    if (candidates.length === 0) {
+      candidates = await this.restaurantMenuFallback(query, addressId);
+    }
     if (candidates.length === 0) {
       return { reply: `I could not find food items for "${query}" at the selected address.` };
     }
@@ -33,43 +54,48 @@ export class FoodAgent {
     const bestCoupon = coupons?.ok ? extractBestCoupon(coupons.data) : undefined;
     const ranked = candidates
       .map((candidate) => scoreCandidate(candidate, bestCoupon))
-      .sort((a, b) => (a.estimatedTotal ?? Number.POSITIVE_INFINITY) - (b.estimatedTotal ?? Number.POSITIVE_INFINITY));
-    const best = ranked[0]!;
-    const addOn = bestCoupon?.minimumOrderValue && best.price && best.price < bestCoupon.minimumOrderValue
-      ? bestCoupon.minimumOrderValue - best.price
-      : undefined;
-
-    const recommendation: FoodRecommendation = {
-      title: best.itemName || best.restaurantName || query,
-      restaurantName: best.restaurantName,
-      restaurantId: best.restaurantId,
-      itemName: best.itemName,
-      itemId: best.itemId,
-      estimatedTotal: best.estimatedTotal,
-      savings: best.savings,
-      couponCode: best.couponCode,
-      addOnSuggestion: addOn && addOn > 0 ? `Add about ${formatMoney(addOn)} more to test the coupon threshold.` : undefined,
-      eta: best.eta,
-      rating: best.rating,
-      raw: best.raw,
-    };
+      .sort((a, b) => compareCandidates(a, b, mode));
+    const options = ranked.map((candidate) => toRecommendation(query, candidate, bestCoupon));
+    const recommendation = options[0]!;
 
     const plan: PendingFoodPlan = {
       kind: "food_order",
       query,
-      addressId: user.addressId,
+      addressId,
       createdAt: new Date().toISOString(),
       recommendation,
     };
 
     return {
       plan,
-      reply: renderRecommendation(query, recommendation, ranked.length),
+      search: {
+        kind: "food_search",
+        query,
+        mode,
+        addressId: user.addressId,
+        page: 0,
+        options,
+        createdAt: new Date().toISOString(),
+      },
+      reply: renderRecommendation(query, recommendation, ranked, mode),
+    };
+  }
+
+  createPlan(query: string, addressId: string, recommendation: FoodRecommendation): PendingFoodPlan {
+    return {
+      kind: "food_order",
+      query,
+      addressId,
+      createdAt: new Date().toISOString(),
+      recommendation,
     };
   }
 
   async confirm(plan: PendingFoodPlan): Promise<string> {
-    const r = plan.recommendation;
+    const items = plan.items?.length ? plan.items : [{ recommendation: plan.recommendation, quantity: 1 }];
+    const added: string[] = [];
+    for (const item of items) {
+      const r = item.recommendation;
     if (!r.restaurantId || !r.itemId) {
       return "I found a recommendation, but the result did not include enough item IDs to safely build the cart. Open Swiggy manually or try a more specific item.";
     }
@@ -78,27 +104,135 @@ export class FoodAgent {
       addressId: plan.addressId,
       itemId: r.itemId,
       restaurantName: r.restaurantName,
-      quantity: 1,
+        quantity: item.quantity,
     });
     if (!add.ok) return `Could not update cart: ${add.error.code} ${add.error.message}`;
-
-    let couponLine = "";
-    if (r.couponCode) {
-      const coupon = await this.executor.foodApplyCoupon(r.couponCode).catch(() => undefined);
-      couponLine = coupon?.ok
-        ? `\nCoupon applied: ${r.couponCode}`
-        : `\nCoupon ${r.couponCode} could not be applied automatically; check it before checkout.`;
+      added.push(`${item.quantity} x ${r.itemName ?? r.itemId}`);
     }
 
-    const cart = await this.executor.foodCart(plan.addressId);
-    const cartText = cart.ok ? JSON.stringify(cart.data, null, 2).slice(0, 2500) : `${cart.error.code} ${cart.error.message}`;
+    const primary = items[0]!.recommendation;
+    let couponLine = "";
+    const couponCode = plan.discount?.foodCouponCode ?? primary.couponCode;
+    if (couponCode) {
+      const coupon = await this.executor.foodApplyCoupon(couponCode).catch(() => undefined);
+      couponLine = coupon?.ok
+        ? `\nCoupon applied: ${couponCode}`
+        : `\nCoupon ${couponCode} could not be applied automatically; check it before checkout.`;
+    }
+
+    const cartText = renderFoodCartSummary(undefined, {
+      itemName: added.join(", "),
+      restaurantName: primary.restaurantName,
+      estimatedTotal: sumPlanEstimate(items),
+    });
     return (
-      `Added to cart: ${r.itemName ?? r.itemId} from ${r.restaurantName ?? r.restaurantId}` +
+      `Added to cart:\n${added.join("\n")}` +
+      (primary.restaurantName ? `\nfrom ${primary.restaurantName}` : "") +
       couponLine +
       "\n\nReview the cart before checkout:\n" +
       cartText +
-      "\n\nCheckout is not automatic. Place the order only after verifying the final total in Swiggy/CLI."
+      "\n\nI skipped an immediate cart refresh to avoid Swiggy MCP rate limits. Use /cart after a short pause for the live total." +
+      "\n\nCheckout/payment is not automatic. Place the order only after verifying the final total in Swiggy/CLI."
     );
+  }
+
+  private async recommendComposite(
+    query: string,
+    components: FoodComponent[],
+    user: TelegramUserProfile,
+    mode: FoodSearchMode
+  ): Promise<FoodAgentResult | undefined> {
+    if (!user.addressId) return undefined;
+    const addressId = user.addressId;
+    const restaurantCandidates = await this.discoverCompositeRestaurants(components, addressId);
+    const matches: Array<FoodMealOption & { score: number }> = [];
+    for (const restaurant of restaurantCandidates) {
+      if (!restaurant.restaurantId) continue;
+      const menu = await this.executor
+        .call("food", "get_restaurant_menu", {
+          restaurantId: restaurant.restaurantId,
+          addressId,
+          page: 1,
+          pageSize: 10,
+        })
+        .catch(() => undefined);
+      if (!menu?.ok) continue;
+      const candidates = dedupeCandidates(extractMenuCandidates(menu.data, restaurant));
+      const planItems: FoodPlanItem[] = [];
+      for (const component of components) {
+        const match = bestComponentMatch(candidates, component, mode);
+        if (!match) break;
+        planItems.push({
+          recommendation: toRecommendation(component.query, scoreCandidate(match), undefined),
+          quantity: orderQuantityForMatch(match, component.quantity),
+        });
+      }
+      if (planItems.length !== components.length) continue;
+      const total = sumPlanEstimate(planItems);
+      matches.push({
+        restaurantName: restaurant.restaurantName,
+        restaurantId: restaurant.restaurantId,
+        items: planItems,
+        estimatedTotal: total,
+        score: total + averageRatingPenalty(planItems),
+      });
+    }
+    matches.sort((a, b) => (mode === "cheapest" ? a.estimatedTotal - b.estimatedTotal : a.score - b.score));
+    const coupons = await this.executor.foodCoupons().catch(() => undefined);
+    const couponList = coupons?.ok ? extractCoupons(coupons.data) : [];
+    for (const match of matches) {
+      match.discount = discountSummaryForTotal(match.estimatedTotal, couponList);
+    }
+    const best = matches[0];
+    if (!best) return undefined;
+    const primary = best.items[0]!.recommendation;
+    const plan: PendingFoodPlan = {
+      kind: "food_order",
+      query,
+      addressId,
+      createdAt: new Date().toISOString(),
+      recommendation: primary,
+      items: best.items,
+      discount: best.discount,
+    };
+    return {
+      plan,
+      search: {
+        kind: "food_search",
+        query,
+        mode,
+        addressId,
+        page: 0,
+        options: matches.flatMap((match) => match.items.map((item) => item.recommendation)),
+        mealOptions: matches.slice(0, 8),
+        createdAt: new Date().toISOString(),
+      },
+      reply: renderCompositeRecommendation(query, best.items, best.restaurantName, matches.length),
+    };
+  }
+
+  private async discoverCompositeRestaurants(components: FoodComponent[], addressId: string): Promise<MenuCandidate[]> {
+    const queries = [
+      components.map((c) => c.query).join(" "),
+      components.filter((c) => !c.keywords.includes("egg")).map((c) => c.query).join(" "),
+      "north indian",
+      "roti paneer",
+      "egg curry",
+    ].filter((query, index, arr) => query.trim().length > 0 && arr.indexOf(query) === index);
+    const seen = new Set<string>();
+    const out: MenuCandidate[] = [];
+    for (const query of queries) {
+      const result = await this.executor.call("food", "search_restaurants", { query, addressId }).catch(() => undefined);
+      if (!result?.ok) continue;
+      for (const restaurant of extractRestaurantCandidates(result.data)) {
+        const key = restaurant.restaurantId ?? restaurant.restaurantName;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(restaurant);
+        if (out.length >= 12) return out;
+      }
+    }
+    return out;
   }
 
   private errorReply(code: string, message: string): string {
@@ -107,6 +241,142 @@ export class FoodAgent {
     }
     return `Swiggy returned ${code}: ${message}`;
   }
+
+  private async restaurantMenuFallback(query: string, addressId: string): Promise<MenuCandidate[]> {
+    const restaurants = await this.executor.call("food", "search_restaurants", { query, addressId });
+    if (!restaurants.ok) return [];
+    const restaurantCandidates = extractRestaurantCandidates(restaurants.data).slice(0, 5);
+    const all: MenuCandidate[] = [];
+    for (const restaurant of restaurantCandidates) {
+      if (!restaurant.restaurantId) continue;
+      const menu = await this.executor
+        .call("food", "get_restaurant_menu", {
+          restaurantId: restaurant.restaurantId,
+          addressId,
+          page: 1,
+          pageSize: 8,
+        })
+        .catch(() => undefined);
+      if (!menu?.ok) continue;
+      all.push(...extractMenuCandidates(menu.data, restaurant));
+    }
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+    return dedupeCandidates(all)
+      .filter((candidate) => {
+        const haystack = `${candidate.itemName ?? ""}`.toLowerCase();
+        return tokens.every((token) => haystack.includes(token));
+      })
+      .slice(0, 12);
+  }
+}
+
+interface FoodComponent {
+  query: string;
+  quantity: number;
+  keywords: string[];
+  avoidKeywords: string[];
+}
+
+function parseCompositeRequest(query: string): FoodComponent[] {
+  const normalized = query
+    .toLowerCase()
+    .replace(/\b(kee|ki|ka|ke)\b/g, " ")
+    .replace(/\b(sabji|sabzi|sabjee)\b/g, "sabzi")
+    .replace(/\b(chappathi|chapathi|chapati)\b/g, "roti")
+    .replace(/\s+/g, " ")
+    .trim();
+  const parts = normalized
+    .split(/\s+(?:and|with|\+|aur)\s+/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return [];
+  return parts.map((part) => {
+    const quantityMatch = part.match(/^(\d+)\s+(.+)$/);
+    const quantity = quantityMatch ? Number(quantityMatch[1]) : 1;
+    const cleaned = (quantityMatch?.[2] ?? part).replace(/\b(of|plate|plates)\b/g, " ").replace(/\s+/g, " ").trim();
+    return {
+      query: cleaned,
+      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+      keywords: expandComponentKeywords(cleaned),
+      avoidKeywords: avoidComponentKeywords(cleaned),
+    };
+  });
+}
+
+function expandComponentKeywords(query: string): string[] {
+  const tokens = query.split(/\s+/).filter((token) => !["sabzi", "curry", "gravy"].includes(token));
+  if (tokens.includes("roti")) return ["roti", "chapati", "phulka"];
+  if (tokens.includes("paneer")) return ["paneer"];
+  if (tokens.includes("egg")) return ["egg"];
+  return tokens;
+}
+
+function avoidComponentKeywords(query: string): string[] {
+  const tokens = query.split(/\s+/);
+  if (tokens.includes("roti")) {
+    return ["sabzi", "sabji", "curry", "gravy", "combo", "meal", "thali", "egg", "omlet", "omelet", "omelette", "chicken", "paneer"];
+  }
+  if (tokens.includes("paneer") && query.includes("sabzi")) {
+    return ["rice", "biryani", "roll", "noodle", "fried rice", "paratha meal"];
+  }
+  if (tokens.includes("egg")) return ["biryani", "rice", "roll", "combo", "meal", "thali"];
+  return [];
+}
+
+function bestComponentMatch(candidates: MenuCandidate[], component: FoodComponent, mode: FoodSearchMode): MenuCandidate | undefined {
+  let matches = candidates.filter((candidate) => {
+    const name = (candidate.itemName ?? "").toLowerCase();
+    return component.keywords.some((keyword) => name.includes(keyword));
+  });
+  const cleanMatches = matches.filter((candidate) => {
+    const name = (candidate.itemName ?? "").toLowerCase();
+    return !component.avoidKeywords.some((keyword) => name.includes(keyword));
+  });
+  if (cleanMatches.length > 0) matches = cleanMatches;
+  if (matches.length === 0 && component.query.includes("roti")) {
+    matches = candidates.filter((candidate) => {
+      const name = (candidate.itemName ?? "").toLowerCase();
+      return ["paratha", "tawa"].some((keyword) => name.includes(keyword));
+    });
+  }
+  return matches
+    .map((candidate) => scoreCandidate(candidate))
+    .sort((a, b) => componentScore(a, component, mode) - componentScore(b, component, mode))[0];
+}
+
+function componentScore(candidate: ScoredCandidate, component: FoodComponent, mode: FoodSearchMode): number {
+  const name = (candidate.itemName ?? "").toLowerCase();
+  const avoidPenalty = component.avoidKeywords.some((keyword) => name.includes(keyword)) ? 500 : 0;
+  const repeatedItemPenalty = component.quantity > 1 && (candidate.estimatedTotal ?? 0) > 80 ? 200 : 0;
+  const base = mode === "cheapest" ? candidate.estimatedTotal ?? Number.POSITIVE_INFINITY : valueScore(candidate);
+  return base + avoidPenalty + repeatedItemPenalty;
+}
+
+function orderQuantityForMatch(candidate: MenuCandidate, requestedQuantity: number): number {
+  const name = candidate.itemName ?? "";
+  const packCount = extractPackCount(name);
+  if (packCount && packCount >= requestedQuantity) return 1;
+  if (packCount && packCount > 1) return Math.ceil(requestedQuantity / packCount);
+  return requestedQuantity;
+}
+
+function extractPackCount(name: string): number | undefined {
+  const direct = name.match(/\b(\d+)\s*(?:pc|pcs|piece|pieces)\b/i);
+  const packOf = name.match(/\bpack\s+of\s+(\d+)\b/i);
+  const value = Number(direct?.[1] ?? packOf?.[1]);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function sumPlanEstimate(items: FoodPlanItem[]): number {
+  return items.reduce((sum, item) => sum + (item.recommendation.estimatedTotal ?? 0) * item.quantity, 0);
+}
+
+function averageRatingPenalty(items: FoodPlanItem[]): number {
+  if (items.length === 0) return 0;
+  return items.reduce((sum, item) => {
+    const rating = Number(item.recommendation.rating);
+    return sum + (Number.isFinite(rating) ? Math.max(0, 4.3 - rating) * 80 : 40);
+  }, 0) / items.length;
 }
 
 interface MenuCandidate {
@@ -126,8 +396,8 @@ interface CouponCandidate {
   minimumOrderValue?: number;
 }
 
-function extractMenuCandidates(payload: unknown): MenuCandidate[] {
-  const list = deepFindArray(payload, ["items", "menuItems", "cards", "restaurants", "data"]) ?? [];
+function extractMenuCandidates(payload: unknown, context: Partial<MenuCandidate> = {}): MenuCandidate[] {
+  const list = collectItemRecords(payload);
   const out: MenuCandidate[] = [];
   for (const item of list) {
     if (!item || typeof item !== "object") continue;
@@ -138,8 +408,8 @@ function extractMenuCandidates(payload: unknown): MenuCandidate[] {
     const price = normalizePrice(firstNumber(nested, ["price", "finalPrice", "defaultPrice", "cost", "itemPrice"]));
     if (!itemName && !restaurantName) continue;
     out.push({
-      restaurantName,
-      restaurantId: firstString(nested, ["restaurantId", "restaurant_id", "restId", "cid"]),
+      restaurantName: restaurantName ?? context.restaurantName,
+      restaurantId: firstString(nested, ["restaurantId", "restaurant_id", "restId", "cid"]) ?? context.restaurantId,
       itemName,
       itemId: firstString(nested, ["itemId", "item_id", "id", "skuId"]),
       price,
@@ -151,9 +421,59 @@ function extractMenuCandidates(payload: unknown): MenuCandidate[] {
   return out;
 }
 
+function extractRestaurantCandidates(payload: unknown): MenuCandidate[] {
+  const list = deepFindArray(payload, ["restaurants", "data"]) ?? [];
+  return list
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((record) => {
+      const flat = flattenOne(record);
+      return {
+        restaurantName: firstString(flat, ["name", "restaurantName", "restaurant_name", "title"]),
+        restaurantId: firstString(flat, ["id", "restaurantId", "restaurant_id"]),
+        eta: firstString(flat, ["deliveryTimeRange", "slaString", "eta"]),
+        rating: firstString(flat, ["avgRating", "avgRatingString", "rating"]),
+        raw: record,
+      };
+    })
+    .filter((candidate) => candidate.restaurantId || candidate.restaurantName);
+}
+
+function collectItemRecords(payload: unknown): unknown[] {
+  const out: unknown[] = [];
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [payload];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      for (const item of current) queue.push(item);
+      continue;
+    }
+    const record = current as Record<string, unknown>;
+    if (looksLikeMenuItem(record)) out.push(record);
+    for (const key of ["items", "menuItems", "cards", "categories", "data"]) {
+      const value = record[key];
+      if (Array.isArray(value) || (value && typeof value === "object")) queue.push(value);
+    }
+  }
+  return out;
+}
+
+function looksLikeMenuItem(record: Record<string, unknown>): boolean {
+  const hasName = firstString(record, ["name", "itemName", "dishName", "title"]) !== undefined;
+  const hasPrice = firstNumber(record, ["price", "finalPrice", "defaultPrice", "cost", "itemPrice"]) !== undefined;
+  const hasItemId = firstString(record, ["itemId", "item_id", "id", "skuId"]) !== undefined;
+  return hasName && hasPrice && hasItemId;
+}
+
 function extractBestCoupon(payload: unknown): CouponCandidate | undefined {
+  return extractCoupons(payload).sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))[0];
+}
+
+function extractCoupons(payload: unknown): CouponCandidate[] {
   const list = deepFindArray(payload, ["coupons", "offers", "data"]) ?? [];
-  const coupons = list
+  return list
     .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
     .map((record) => {
       const flat = flattenOne(record);
@@ -164,7 +484,21 @@ function extractBestCoupon(payload: unknown): CouponCandidate | undefined {
       };
     })
     .filter((coupon) => coupon.code || coupon.discount);
-  return coupons.sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))[0];
+}
+
+function discountSummaryForTotal(total: number, coupons: CouponCandidate[]): FoodDiscountSummary {
+  const applicable = coupons
+    .filter((coupon) => coupon.discount !== undefined && (coupon.minimumOrderValue === undefined || total >= coupon.minimumOrderValue))
+    .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))[0];
+  const closest = coupons
+    .filter((coupon) => coupon.minimumOrderValue !== undefined && total < coupon.minimumOrderValue!)
+    .sort((a, b) => a.minimumOrderValue! - b.minimumOrderValue!)[0];
+  return {
+    foodCouponCode: applicable?.code,
+    foodCouponSavings: applicable?.discount,
+    foodCouponMinimum: applicable?.minimumOrderValue ?? closest?.minimumOrderValue,
+    paymentOfferNote: "Payment/card offers were not exposed by the current Food MCP cart response; it only returned Cash on Delivery.",
+  };
 }
 
 function scoreCandidate(candidate: MenuCandidate, coupon?: CouponCandidate): MenuCandidate & {
@@ -186,6 +520,58 @@ function scoreCandidate(candidate: MenuCandidate, coupon?: CouponCandidate): Men
   };
 }
 
+function toRecommendation(query: string, candidate: ScoredCandidate, coupon?: CouponCandidate): FoodRecommendation {
+  const addOn = coupon?.minimumOrderValue && candidate.price && candidate.price < coupon.minimumOrderValue
+    ? coupon.minimumOrderValue - candidate.price
+    : undefined;
+  return {
+    title: candidate.itemName || candidate.restaurantName || query,
+    restaurantName: candidate.restaurantName,
+    restaurantId: candidate.restaurantId,
+    itemName: candidate.itemName,
+    itemId: candidate.itemId,
+    estimatedTotal: candidate.estimatedTotal,
+    savings: candidate.savings,
+    couponCode: candidate.couponCode,
+    addOnSuggestion: addOn && addOn > 0 ? `Add about ${formatMoney(addOn)} more to test the coupon threshold.` : undefined,
+    eta: candidate.eta,
+    rating: candidate.rating,
+    raw: candidate.raw,
+  };
+}
+
+type ScoredCandidate = MenuCandidate & {
+  estimatedTotal?: number;
+  savings?: number;
+  couponCode?: string;
+};
+
+function compareCandidates(a: ScoredCandidate, b: ScoredCandidate, mode: FoodSearchMode): number {
+  if (mode === "cheapest") {
+    return (a.estimatedTotal ?? Number.POSITIVE_INFINITY) - (b.estimatedTotal ?? Number.POSITIVE_INFINITY);
+  }
+  return valueScore(a) - valueScore(b);
+}
+
+function valueScore(candidate: ScoredCandidate): number {
+  const total = candidate.estimatedTotal ?? Number.POSITIVE_INFINITY;
+  const rating = Number(candidate.rating);
+  const ratingPenalty = Number.isFinite(rating) ? Math.max(0, 4.3 - rating) * 80 : 40;
+  return total + ratingPenalty;
+}
+
+function dedupeCandidates(candidates: MenuCandidate[]): MenuCandidate[] {
+  const seen = new Set<string>();
+  const out: MenuCandidate[] = [];
+  for (const candidate of candidates) {
+    const key = `${candidate.restaurantId ?? ""}:${candidate.itemId ?? candidate.itemName ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(candidate);
+  }
+  return out;
+}
+
 function flattenOne(record: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...record };
   for (const value of Object.values(record)) {
@@ -199,9 +585,9 @@ function normalizePrice(value?: number): number | undefined {
   return value > 10_000 ? value / 100 : value;
 }
 
-function renderRecommendation(query: string, r: FoodRecommendation, count: number): string {
+function renderRecommendation(query: string, r: FoodRecommendation, ranked: ScoredCandidate[], mode: FoodSearchMode): string {
   const lines = [
-    `Best value I found for "${query}":`,
+    `${mode === "cheapest" ? "Cheapest match" : "Best value pick"} for "${query}":`,
     "",
     `${r.itemName ?? r.title}${r.restaurantName ? ` from ${r.restaurantName}` : ""}`,
     `Estimated total: ${formatMoney(r.estimatedTotal)}`,
@@ -210,6 +596,34 @@ function renderRecommendation(query: string, r: FoodRecommendation, count: numbe
   if (r.addOnSuggestion) lines.push(r.addOnSuggestion);
   if (r.eta) lines.push(`ETA: ${r.eta}`);
   if (r.rating) lines.push(`Rating: ${r.rating}`);
-  lines.push("", `Compared ${count} candidate items. Reply "confirm" to continue, or search another item.`);
+  const alternatives = ranked.slice(1, 4);
+  if (alternatives.length > 0) {
+    lines.push("", "Other options:");
+    for (const alt of alternatives) {
+      lines.push(`- ${alt.itemName ?? "Item"} from ${alt.restaurantName ?? "restaurant"} - ${formatMoney(alt.estimatedTotal)}${alt.rating ? `, rating ${alt.rating}` : ""}`);
+    }
+  }
+  lines.push("", `Compared ${ranked.length} candidate items. Reply "confirm" to continue, or search another item.`);
+  return lines.join("\n");
+}
+
+function renderCompositeRecommendation(
+  query: string,
+  items: FoodPlanItem[],
+  restaurantName: string | undefined,
+  restaurantCount: number
+): string {
+  const lines = [
+    `Meal match for "${query}":`,
+    restaurantName ? `Restaurant: ${restaurantName}` : undefined,
+    "",
+  ].filter((line): line is string => line !== undefined);
+  for (const item of items) {
+    lines.push(
+      `${item.quantity} x ${item.recommendation.itemName ?? item.recommendation.title} - ${formatMoney(item.recommendation.estimatedTotal)} each`
+    );
+  }
+  lines.push("", `Estimated item total: ${formatMoney(sumPlanEstimate(items))}`);
+  lines.push(`Matched complete meal at ${restaurantCount} restaurant${restaurantCount === 1 ? "" : "s"}. Reply "confirm" to add all items.`);
   return lines.join("\n");
 }

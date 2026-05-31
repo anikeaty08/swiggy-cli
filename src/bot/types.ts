@@ -1,6 +1,7 @@
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
 }
 
 export interface TelegramMessage {
@@ -22,12 +23,26 @@ export interface TelegramMessage {
   };
 }
 
+export interface TelegramCallbackQuery {
+  id: string;
+  data?: string;
+  message?: TelegramMessage;
+  from: {
+    id: number;
+    is_bot?: boolean;
+    first_name?: string;
+    username?: string;
+  };
+}
+
 export interface TelegramUserProfile {
   telegramUserId: number;
   swiggyHome: string;
   addressId?: string;
+  manualAddress?: string;
   city?: string;
   lastPlan?: PendingFoodPlan;
+  lastSearch?: FoodSearchSession;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +53,13 @@ export interface PendingFoodPlan {
   addressId: string;
   createdAt: string;
   recommendation: FoodRecommendation;
+  items?: FoodPlanItem[];
+  discount?: FoodDiscountSummary;
+}
+
+export interface FoodPlanItem {
+  recommendation: FoodRecommendation;
+  quantity: number;
 }
 
 export interface FoodRecommendation {
@@ -53,4 +75,32 @@ export interface FoodRecommendation {
   eta?: string;
   rating?: string;
   raw: unknown;
+}
+
+export type FoodSearchMode = "best_value" | "cheapest";
+
+export interface FoodSearchSession {
+  kind: "food_search";
+  query: string;
+  mode: FoodSearchMode;
+  addressId: string;
+  page: number;
+  options: FoodRecommendation[];
+  mealOptions?: FoodMealOption[];
+  createdAt: string;
+}
+
+export interface FoodMealOption {
+  restaurantName?: string;
+  restaurantId?: string;
+  items: FoodPlanItem[];
+  estimatedTotal: number;
+  discount?: FoodDiscountSummary;
+}
+
+export interface FoodDiscountSummary {
+  foodCouponCode?: string;
+  foodCouponSavings?: number;
+  foodCouponMinimum?: number;
+  paymentOfferNote?: string;
 }

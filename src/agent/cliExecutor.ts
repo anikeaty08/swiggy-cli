@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CliEnvelope, ServerName } from "../types/index.js";
@@ -67,15 +67,21 @@ export class SwiggyCliExecutor {
     return this.run(["food", "apply-coupon", code]);
   }
 
+  async foodTrackOrder(orderId: string): Promise<CliEnvelope> {
+    return this.run(["food", "track", orderId]);
+  }
+
   async call(server: ServerName, tool: string, input: unknown): Promise<CliEnvelope> {
     return this.run(["call", server, tool, "--input", JSON.stringify(input)]);
   }
 
   authCommand(server = "food"): string {
+    const target = this.resolveCommand();
+    const cli = [quote(target.file), ...target.prefixArgs.map(quote), "auth", "init", "--server", server].join(" ");
     if (process.platform === "win32") {
-      return `$env:SWIGGY_HOME="${this.swiggyHome}"; swiggy auth init --server ${server}`;
+      return `$env:SWIGGY_HOME=${quote(this.swiggyHome)}; ${cli}`;
     }
-    return `SWIGGY_HOME="${this.swiggyHome}" swiggy auth init --server ${server}`;
+    return `SWIGGY_HOME=${quote(this.swiggyHome)} ${cli}`;
   }
 
   private async run(args: string[]): Promise<CliEnvelope> {
@@ -93,14 +99,42 @@ export class SwiggyCliExecutor {
       if (e.stdout) return { stdout: e.stdout };
       throw new Error(e.stderr || e.message || String(err));
     });
-    return JSON.parse(stdout) as CliEnvelope;
+    const parsed = JSON.parse(stdout) as CliEnvelope;
+    if (!parsed.ok && parsed.error.code === "NETWORK" && /429/.test(parsed.error.message)) {
+      await sleep(2_000);
+      const retry = await execFileAsync(target.file, [...target.prefixArgs, ...allArgs], {
+        env,
+        maxBuffer: 1024 * 1024 * 10,
+        windowsHide: true,
+      }).catch((err: unknown) => {
+        const e = err as { stdout?: string; stderr?: string; message?: string };
+        if (e.stdout) return { stdout: e.stdout };
+        throw new Error(e.stderr || e.message || String(err));
+      });
+      return JSON.parse(retry.stdout) as CliEnvelope;
+    }
+    return parsed;
   }
 
   private resolveCommand(): { file: string; prefixArgs: string[] } {
     if (this.command) return { file: this.command, prefixArgs: [] };
     const here = dirname(fileURLToPath(import.meta.url));
-    const distCli = resolve(here, "..", "cli.js");
+    const currentModule = fileURLToPath(import.meta.url);
+    if (basename(currentModule) === "cli.js" && existsSync(currentModule)) {
+      return { file: process.execPath, prefixArgs: [currentModule] };
+    }
+    const sameDirCli = resolve(here, "cli.js");
+    if (existsSync(sameDirCli)) return { file: process.execPath, prefixArgs: [sameDirCli] };
+    const distCli = resolve(here, "..", "..", "dist", "cli.js");
     if (existsSync(distCli)) return { file: process.execPath, prefixArgs: [distCli] };
     return { file: "swiggy", prefixArgs: [] };
   }
+}
+
+function quote(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { createServer } from "node:http";
 import { createHash, randomBytes } from "node:crypto";
+import { spawn } from "node:child_process";
 import { PATHS } from "./paths.js";
 import { CliError, AuthRequiredError, NetworkError } from "./errors.js";
 import type { AuthState, ServerName } from "../types/index.js";
@@ -239,22 +240,18 @@ export async function interactiveAuthLoginV2(opts: InteractiveAuthOptions): Prom
       const error = u.searchParams.get("error");
       res.setHeader("content-type", "text/html");
       if (error) {
-        res.end(`<h1>Authorization failed</h1><p>${error}</p>`);
+        res.end(renderAuthPage("Authorization failed", "Swiggy returned an OAuth error.", false, error));
         server.close();
         reject(new CliError("AUTH_FAILED", `OAuth error: ${error}`));
         return;
       }
       if (!code || state !== expectedState) {
-        res.end(`<h1>Invalid response</h1>`);
+        res.end(renderAuthPage("Invalid response", "The callback did not match the active login session.", false));
         server.close();
         reject(new CliError("AUTH_FAILED", "Invalid OAuth callback."));
         return;
       }
-      res.end(
-        `<!doctype html><meta charset="utf-8"><title>swiggy-cli</title>` +
-          `<body style="font-family:system-ui;background:#fff5ed;color:#222;padding:40px">` +
-          `<h1 style="color:#FC8019">swiggy-cli</h1><p>Authentication complete. You can close this tab.</p></body>`
-      );
+      res.end(renderAuthPage("Authentication complete", "Your Swiggy profile is linked. You can close this tab and return to Telegram or the terminal.", true));
       server.close();
       resolve(code);
     });
@@ -269,10 +266,11 @@ export async function interactiveAuthLoginV2(opts: InteractiveAuthOptions): Prom
   authUrl.searchParams.set("code_challenge_method", "S256");
   authUrl.searchParams.set("scope", (metadata.scopes_supported || ["mcp"]).join(" "));
   const link = authUrl.toString();
+  const opened = openBrowser(link);
   // Print the URL on its own line so terminals can detect it as a clickable link.
   // eslint-disable-next-line no-console
-  console.error(`\nSign in to Swiggy (${opts.server}) by opening this URL:`);
-  console.error("Press Ctrl + Click to open:");
+  console.error(`\nSign in to Swiggy (${opts.server}):`);
+  console.error(opened ? "A browser window should open automatically. If it does not, open this URL:" : "Open this URL:");
   // eslint-disable-next-line no-console
   console.error(link);
   // eslint-disable-next-line no-console
@@ -320,6 +318,60 @@ export async function interactiveAuthLoginV2(opts: InteractiveAuthOptions): Prom
     tokenEndpoint: metadata.token_endpoint,
   };
   await saveAuth(auth);
+}
+
+function openBrowser(url: string): boolean {
+  if (process.env.SWIGGY_AUTH_NO_BROWSER === "1" || process.env.CI === "true") return false;
+  try {
+    if (process.platform === "win32") {
+      spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+      return true;
+    }
+    if (process.platform === "darwin") {
+      spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
+      return true;
+    }
+    spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function renderAuthPage(title: string, message: string, ok: boolean, detail?: string): string {
+  const color = ok ? "#16803C" : "#B42318";
+  const icon = ok ? "✓" : "!";
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>swiggy-cli auth</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #fff7ed; color: #1f2933; }
+    main { width: min(520px, calc(100vw - 32px)); background: #fff; border: 1px solid #fed7aa; border-radius: 18px; padding: 32px; box-shadow: 0 24px 80px rgba(31, 41, 51, 0.14); }
+    .brand { color: #fc8019; font-weight: 800; font-size: 15px; letter-spacing: 0; margin-bottom: 22px; }
+    .mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: ${color}; color: #fff; font-size: 30px; font-weight: 800; margin-bottom: 18px; }
+    h1 { margin: 0 0 10px; font-size: 28px; line-height: 1.15; letter-spacing: 0; }
+    p { margin: 0; color: #52616b; font-size: 16px; line-height: 1.55; }
+    .detail { margin-top: 18px; padding: 12px 14px; border-radius: 10px; background: #fff1f2; color: #9f1239; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">swiggy-cli</div>
+    <div class="mark">${icon}</div>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(message)}</p>
+    ${detail ? `<div class="detail">${escapeHtml(detail)}</div>` : ""}
+  </main>
+</body>
+</html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 async function refreshAccessToken(entry: AuthState["servers"][string]): Promise<{

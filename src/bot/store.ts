@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { TelegramUserProfile } from "./types.js";
 
@@ -13,7 +13,7 @@ export class TelegramBotStore {
   readonly file: string;
 
   constructor(dataDir = process.env.SWIGGY_BOT_HOME || join(homedir(), ".swiggy", "telegram-bot")) {
-    this.dataDir = dataDir;
+    this.dataDir = resolve(dataDir);
     this.file = join(dataDir, "users.json");
   }
 
