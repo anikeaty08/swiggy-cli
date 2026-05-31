@@ -24,7 +24,10 @@ export class FoodAgent {
     });
     if (!search.ok) return { reply: this.errorReply(search.error.code, search.error.message) };
 
-    const candidates = extractMenuCandidates(search.data).slice(0, 8);
+    let candidates = extractMenuCandidates(search.data).slice(0, 8);
+    if (candidates.length === 0) {
+      candidates = await this.restaurantMenuFallback(query, user.addressId);
+    }
     if (candidates.length === 0) {
       return { reply: `I could not find food items for "${query}" at the selected address.` };
     }
@@ -107,6 +110,33 @@ export class FoodAgent {
     }
     return `Swiggy returned ${code}: ${message}`;
   }
+
+  private async restaurantMenuFallback(query: string, addressId: string): Promise<MenuCandidate[]> {
+    const restaurants = await this.executor.call("food", "search_restaurants", { query, addressId });
+    if (!restaurants.ok) return [];
+    const restaurantCandidates = extractRestaurantCandidates(restaurants.data).slice(0, 5);
+    const all: MenuCandidate[] = [];
+    for (const restaurant of restaurantCandidates) {
+      if (!restaurant.restaurantId) continue;
+      const menu = await this.executor
+        .call("food", "get_restaurant_menu", {
+          restaurantId: restaurant.restaurantId,
+          addressId,
+          page: 1,
+          pageSize: 8,
+        })
+        .catch(() => undefined);
+      if (!menu?.ok) continue;
+      all.push(...extractMenuCandidates(menu.data, restaurant));
+    }
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+    return dedupeCandidates(all)
+      .filter((candidate) => {
+        const haystack = `${candidate.itemName ?? ""}`.toLowerCase();
+        return tokens.every((token) => haystack.includes(token));
+      })
+      .slice(0, 12);
+  }
 }
 
 interface MenuCandidate {
@@ -126,8 +156,8 @@ interface CouponCandidate {
   minimumOrderValue?: number;
 }
 
-function extractMenuCandidates(payload: unknown): MenuCandidate[] {
-  const list = deepFindArray(payload, ["items", "menuItems", "cards", "restaurants", "data"]) ?? [];
+function extractMenuCandidates(payload: unknown, context: Partial<MenuCandidate> = {}): MenuCandidate[] {
+  const list = collectItemRecords(payload);
   const out: MenuCandidate[] = [];
   for (const item of list) {
     if (!item || typeof item !== "object") continue;
@@ -138,8 +168,8 @@ function extractMenuCandidates(payload: unknown): MenuCandidate[] {
     const price = normalizePrice(firstNumber(nested, ["price", "finalPrice", "defaultPrice", "cost", "itemPrice"]));
     if (!itemName && !restaurantName) continue;
     out.push({
-      restaurantName,
-      restaurantId: firstString(nested, ["restaurantId", "restaurant_id", "restId", "cid"]),
+      restaurantName: restaurantName ?? context.restaurantName,
+      restaurantId: firstString(nested, ["restaurantId", "restaurant_id", "restId", "cid"]) ?? context.restaurantId,
       itemName,
       itemId: firstString(nested, ["itemId", "item_id", "id", "skuId"]),
       price,
@@ -149,6 +179,52 @@ function extractMenuCandidates(payload: unknown): MenuCandidate[] {
     });
   }
   return out;
+}
+
+function extractRestaurantCandidates(payload: unknown): MenuCandidate[] {
+  const list = deepFindArray(payload, ["restaurants", "data"]) ?? [];
+  return list
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((record) => {
+      const flat = flattenOne(record);
+      return {
+        restaurantName: firstString(flat, ["name", "restaurantName", "restaurant_name", "title"]),
+        restaurantId: firstString(flat, ["id", "restaurantId", "restaurant_id"]),
+        eta: firstString(flat, ["deliveryTimeRange", "slaString", "eta"]),
+        rating: firstString(flat, ["avgRating", "avgRatingString", "rating"]),
+        raw: record,
+      };
+    })
+    .filter((candidate) => candidate.restaurantId || candidate.restaurantName);
+}
+
+function collectItemRecords(payload: unknown): unknown[] {
+  const out: unknown[] = [];
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [payload];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      for (const item of current) queue.push(item);
+      continue;
+    }
+    const record = current as Record<string, unknown>;
+    if (looksLikeMenuItem(record)) out.push(record);
+    for (const key of ["items", "menuItems", "cards", "categories", "data"]) {
+      const value = record[key];
+      if (Array.isArray(value) || (value && typeof value === "object")) queue.push(value);
+    }
+  }
+  return out;
+}
+
+function looksLikeMenuItem(record: Record<string, unknown>): boolean {
+  const hasName = firstString(record, ["name", "itemName", "dishName", "title"]) !== undefined;
+  const hasPrice = firstNumber(record, ["price", "finalPrice", "defaultPrice", "cost", "itemPrice"]) !== undefined;
+  const hasItemId = firstString(record, ["itemId", "item_id", "id", "skuId"]) !== undefined;
+  return hasName && hasPrice && hasItemId;
 }
 
 function extractBestCoupon(payload: unknown): CouponCandidate | undefined {
@@ -184,6 +260,18 @@ function scoreCandidate(candidate: MenuCandidate, coupon?: CouponCandidate): Men
     couponCode: couponApplies ? coupon?.code : undefined,
     estimatedTotal: base === undefined ? undefined : Math.max(0, base - (savings ?? 0)),
   };
+}
+
+function dedupeCandidates(candidates: MenuCandidate[]): MenuCandidate[] {
+  const seen = new Set<string>();
+  const out: MenuCandidate[] = [];
+  for (const candidate of candidates) {
+    const key = `${candidate.restaurantId ?? ""}:${candidate.itemId ?? candidate.itemName ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(candidate);
+  }
+  return out;
 }
 
 function flattenOne(record: Record<string, unknown>): Record<string, unknown> {
