@@ -1,4 +1,6 @@
-# MCP protocol notes
+﻿# 🍽️ MCP protocol notes
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Practical notes about how this CLI speaks the [Model Context Protocol](https://modelcontextprotocol.io) to the Swiggy MCP servers. If you're trying to debug a session or replay a request manually, start here.
 
@@ -12,7 +14,7 @@ The Swiggy servers use **Streamable HTTP** (the post-SSE-only successor transpor
 | `instamart` | `https://mcp.swiggy.com/im`           |
 | `dineout`   | `https://mcp.swiggy.com/dineout`      |
 
-Override via `SWIGGY_<SERVER>_URL` (e.g. `SWIGGY_FOOD_URL`) — handy for staging.
+Override via `SWIGGY_<SERVER>_URL` (e.g. `SWIGGY_FOOD_URL`) â€” handy for staging.
 
 ## Headers we send
 
@@ -29,34 +31,34 @@ The `mcp-session-id` is captured from the response of the first request and reus
 ## Handshake
 
 ```
-→ initialize { protocolVersion, capabilities: {tools:{}}, clientInfo }
-← initialize result
-→ notifications/initialized        (best-effort, no response)
+â†’ initialize { protocolVersion, capabilities: {tools:{}}, clientInfo }
+â† initialize result
+â†’ notifications/initialized        (best-effort, no response)
 ```
 
 After that, normal RPCs:
 
 ```
-→ tools/list
-← { tools: [...] }
+â†’ tools/list
+â† { tools: [...] }
 
-→ tools/call { name, arguments }
-← { content: [...] | structuredContent: ... | isError: true }
+â†’ tools/call { name, arguments }
+â† { content: [...] | structuredContent: ... | isError: true }
 ```
 
 ## Response shapes
 
 A tool result can contain:
 
-- `structuredContent` — JSON object. Preferred when present; this CLI passes it through unchanged.
-- `content[]` — array of `{ type: "text", text: "..." }` etc. The CLI extracts and parses text blocks (single block → JSON-or-string; multiple → array of strings).
-- `isError: true` — promote to a `MCP_ERROR` (exit 6).
+- `structuredContent` â€” JSON object. Preferred when present; this CLI passes it through unchanged.
+- `content[]` â€” array of `{ type: "text", text: "..." }` etc. The CLI extracts and parses text blocks (single block â†’ JSON-or-string; multiple â†’ array of strings).
+- `isError: true` â€” promote to a `MCP_ERROR` (exit 6).
 
 See `extractToolPayload()` in `src/lib/mcp.ts`.
 
 ## SSE handling
 
-If the response `content-type` is `text/event-stream`, we read frames until we see one with an `id` matching the request, then close the body. Multi-frame streams are intentionally simplified — for tools that genuinely stream multiple events, use `--raw` and parse the SSE yourself.
+If the response `content-type` is `text/event-stream`, we read frames until we see one with an `id` matching the request, then close the body. Multi-frame streams are intentionally simplified â€” for tools that genuinely stream multiple events, use `--raw` and parse the SSE yourself.
 
 ## Sessions
 
@@ -76,4 +78,4 @@ curl -s https://mcp.swiggy.com/food \
   -d '{"jsonrpc":"2.0","id":"1","method":"tools/list","params":{}}'
 ```
 
-If that returns 401, the token is expired or revoked — re-auth.
+If that returns 401, the token is expired or revoked â€” re-auth.

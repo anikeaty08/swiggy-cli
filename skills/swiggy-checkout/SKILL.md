@@ -1,9 +1,11 @@
----
+﻿---
 name: swiggy-checkout
-description: Place a Swiggy food or Instamart order via swiggy-cli, with the right safety rails. Use only when the human has explicitly asked to checkout — not as a continuation of "add to cart".
+description: Place a Swiggy food or Instamart order via swiggy-cli, with the right safety rails. Use only when the human has explicitly asked to checkout â€” not as a continuation of "add to cart".
 ---
 
-# swiggy-checkout
+# 🍽️ swiggy-checkout
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Checkout places **real, COD-only orders** that **cannot be cancelled** through the MCP API. Treat every invocation as irreversible.
 

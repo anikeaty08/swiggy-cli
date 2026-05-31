@@ -1,4 +1,6 @@
-# Troubleshooting
+﻿# 🍽️ Troubleshooting
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 ## `swiggy doctor` is the first stop
 
@@ -51,7 +53,7 @@ You hit a destructive tool without `--yes`. Either:
 swiggy food checkout --no-interactive --yes
 ```
 
-…or split your script: have a human approve checkout out-of-band.
+â€¦or split your script: have a human approve checkout out-of-band.
 
 ## `npx swiggy` doesn't find the binary
 
@@ -71,4 +73,4 @@ The CLI consumes the first JSON-RPC response frame from an SSE stream and return
 
 ## Mobile app conflicts
 
-Per the upstream manifest, do not open the Swiggy mobile app while running these commands — the session can invalidate. If your tokens stop working unexpectedly, log out of the mobile app and re-auth: `swiggy auth init`.
+Per the upstream manifest, do not open the Swiggy mobile app while running these commands â€” the session can invalidate. If your tokens stop working unexpectedly, log out of the mobile app and re-auth: `swiggy auth init`.

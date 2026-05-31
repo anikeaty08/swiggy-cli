@@ -1,4 +1,6 @@
-# swiggy-cli
+﻿# 🍽️ swiggy-cli
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 Terminal-grade access to Swiggy's MCP platform.
 

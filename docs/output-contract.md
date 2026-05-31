@@ -1,4 +1,6 @@
-# Output contract
+﻿# 🍽️ Output contract
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 The CLI guarantees a stable JSON shape under `--json` (or `--raw`).
 
@@ -15,7 +17,7 @@ The CLI guarantees a stable JSON shape under `--json` (or `--raw`).
 ```
 
 - `server` and `tool` may be omitted for management commands (e.g. `swiggy config show`).
-- `data` is whatever the tool returned, post-extraction (text → parsed JSON when possible, structured content passthrough).
+- `data` is whatever the tool returned, post-extraction (text â†’ parsed JSON when possible, structured content passthrough).
 - `meta` may grow over time. Treat unknown keys as ignorable. Generic calls include `meta.schemaValidation` when live schema validation is skipped.
 
 ## Error envelope

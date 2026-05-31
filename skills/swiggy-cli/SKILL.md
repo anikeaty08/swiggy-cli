@@ -1,11 +1,13 @@
----
+﻿---
 name: swiggy-cli
 description: How to drive the swiggy-cli (a wrapper over the official Swiggy MCP servers) from inside an agent. Always run in machine mode, branch on stable error codes, and prefer the generic Layer B commands.
 ---
 
-# swiggy-cli (master skill)
+# 🍽️ swiggy-cli (master skill)
 
-`swiggy-cli` is an unofficial community CLI over the three Swiggy MCP servers — Food, Instamart, Dineout. It exposes every upstream tool through one stable JSON envelope and consistent exit codes, making it safe to call from any agent loop.
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
+
+`swiggy-cli` is an unofficial community CLI over the three Swiggy MCP servers â€” Food, Instamart, Dineout. It exposes every upstream tool through one stable JSON envelope and consistent exit codes, making it safe to call from any agent loop.
 
 ## When to use
 
@@ -15,7 +17,7 @@ Use this skill whenever the user asks an agent to:
 - place a Swiggy food / Instamart order (after explicit human approval)
 - look up dineout restaurants, slots, or bookings
 
-If the user simply asks a factual question about Swiggy (e.g. "what cuisines do they have"), do **not** invoke the CLI — it requires a real authenticated account.
+If the user simply asks a factual question about Swiggy (e.g. "what cuisines do they have"), do **not** invoke the CLI â€” it requires a real authenticated account.
 
 ## Hard rules
 
@@ -45,11 +47,11 @@ Failure:
 { "ok": false, "error": { "code": "AUTH_REQUIRED", "message": "...", "details": {} } }
 ```
 
-## Exit code → action map
+## Exit code â†’ action map
 
 | code | error.code              | action                                  |
 | ---: | ----------------------- | --------------------------------------- |
-| 0    | —                       | success                                 |
+| 0    | â€”                       | success                                 |
 | 2    | `USAGE`                 | fix arguments and retry                 |
 | 3    | `AUTH_REQUIRED`         | ask the human to run `swiggy auth init` |
 | 4    | `NOT_FOUND`             | tool not exposed; re-list with `tools`  |
@@ -59,11 +61,11 @@ Failure:
 
 ## Subskills
 
-- [`swiggy-search`](../swiggy-search/SKILL.md) — search across food / instamart / dineout
-- [`swiggy-cart`](../swiggy-cart/SKILL.md) — read and mutate the food / instamart cart
-- [`swiggy-checkout`](../swiggy-checkout/SKILL.md) — place an order, with safety rails
-- [`swiggy-dineout-booking`](../swiggy-dineout-booking/SKILL.md) — discover slots and book a table
-- [`swiggy-track`](../swiggy-track/SKILL.md) — list / inspect / track orders
+- [`swiggy-search`](../swiggy-search/SKILL.md) â€” search across food / instamart / dineout
+- [`swiggy-cart`](../swiggy-cart/SKILL.md) â€” read and mutate the food / instamart cart
+- [`swiggy-checkout`](../swiggy-checkout/SKILL.md) â€” place an order, with safety rails
+- [`swiggy-dineout-booking`](../swiggy-dineout-booking/SKILL.md) â€” discover slots and book a table
+- [`swiggy-track`](../swiggy-track/SKILL.md) â€” list / inspect / track orders
 
 ## References
 

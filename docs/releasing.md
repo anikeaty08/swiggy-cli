@@ -1,4 +1,6 @@
-# Releasing
+﻿# 🍽️ Releasing
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 ## Checklist
 
@@ -21,7 +23,7 @@ Releases are tag-driven. Pushing a tag matching `v*.*.*` triggers `.github/workf
 
 A maintainer with publish rights needs:
 
-- `NPM_TOKEN` set as a GitHub Actions secret on this repo. Use a granular access token scoped to `swiggy-cli` only — not a classic, not a legacy token.
+- `NPM_TOKEN` set as a GitHub Actions secret on this repo. Use a granular access token scoped to `swiggy-cli` only â€” not a classic, not a legacy token.
 - npm 2FA configured for "Auth and Writes" (recommended). With provenance + 2FA, the release pipeline still works because the GitHub OIDC token authorises publish; the human 2FA prompt is bypassed for CI.
 
 ## Cutting a release
@@ -34,7 +36,7 @@ npm run lint && npm test && npm run build && npm pack --dry-run
 
 # bump
 npm version patch        # or minor / major; this writes package.json + creates a tag locally
-git push --follow-tags   # pushes commit AND the tag → triggers release.yml
+git push --follow-tags   # pushes commit AND the tag â†’ triggers release.yml
 ```
 
 After CI completes:
@@ -73,7 +75,7 @@ Users opt in with `npm i -g swiggy-cli@next`. Promote later with `npm dist-tag a
 If a release is broken:
 
 ```bash
-npm deprecate swiggy-cli@<bad-version> "<reason — point at the fix>"
+npm deprecate swiggy-cli@<bad-version> "<reason â€” point at the fix>"
 ```
 
-Do not unpublish unless within the 72-hour window and the version was never installed by anyone — unpublishing breaks lockfiles for everyone who already has it.
+Do not unpublish unless within the 72-hour window and the version was never installed by anyone â€” unpublishing breaks lockfiles for everyone who already has it.

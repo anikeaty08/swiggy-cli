@@ -1,4 +1,6 @@
-# Contributor Covenant Code of Conduct
+﻿# 🍽️ Contributor Covenant Code of Conduct
+
+> 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
 This project follows the [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 
