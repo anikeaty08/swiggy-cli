@@ -85,5 +85,13 @@ export interface FoodSearchSession {
   addressId: string;
   page: number;
   options: FoodRecommendation[];
+  mealOptions?: FoodMealOption[];
   createdAt: string;
+}
+
+export interface FoodMealOption {
+  restaurantName?: string;
+  restaurantId?: string;
+  items: FoodPlanItem[];
+  estimatedTotal: number;
 }

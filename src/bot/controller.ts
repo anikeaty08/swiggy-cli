@@ -5,6 +5,7 @@ import { SwiggyCliExecutor } from "../agent/cliExecutor.js";
 import { FoodAgent } from "../agent/foodAgent.js";
 import { renderFoodCartSummary } from "../agent/cartSummary.js";
 import { deepFindArray, firstString } from "../agent/jsonHeuristics.js";
+import { b, code, h, lines } from "./format.js";
 
 export interface TelegramBotOptions {
   token: string;
@@ -58,21 +59,29 @@ export class SwiggyTelegramBot {
         });
         await this.client.sendMessage(
           chatId,
-          "I saved the shared coordinates for context. Food ordering still needs a Swiggy saved address id; send `/addresses` and then `/location <addressId>`."
+          lines([
+            b("Location received"),
+            "I saved the shared coordinates for context.",
+            "",
+            "Food ordering still needs a saved Swiggy address id.",
+            `Send ${code("/addresses")} and then ${code("/location <addressId>")}.`,
+          ]),
+          undefined,
+          "HTML"
         );
         return;
       }
 
-      if (!text || text === "/start" || text === "/help") {
-        await this.client.sendMessage(chatId, helpText(user));
+      if (!text || text === "/start" || text === "/help" || text === "/init" || text === "/agent_init") {
+        await this.client.sendMessage(chatId, helpText(user), undefined, "HTML");
         return;
       }
       if (text === "/auth" || text.startsWith("/auth ")) {
-        await this.client.sendMessage(chatId, authText(this.executor(user), text.split(/\s+/)[1] || "food"));
+        await this.client.sendMessage(chatId, authText(this.executor(user), text.split(/\s+/)[1] || "food"), undefined, "HTML");
         return;
       }
       if (text === "/status") {
-        await this.client.sendMessage(chatId, await this.renderStatus(user));
+        await this.client.sendMessage(chatId, await this.renderStatus(user), undefined, "HTML");
         return;
       }
       if (text === "/addresses") {
@@ -80,30 +89,35 @@ export class SwiggyTelegramBot {
         return;
       }
       if (text.startsWith("/location")) {
-        await this.client.sendMessage(chatId, await this.setLocation(telegramUserId, text));
+        await this.client.sendMessage(chatId, await this.setLocation(telegramUserId, text), undefined, "HTML");
         return;
       }
       if (text.startsWith("/address")) {
-        await this.client.sendMessage(chatId, await this.setManualAddress(telegramUserId, text));
+        await this.client.sendMessage(chatId, await this.setManualAddress(telegramUserId, text), undefined, "HTML");
         return;
       }
       if (text === "/cart") {
-        await this.client.sendMessage(chatId, await this.renderCart(user));
+        await this.client.sendMessage(chatId, h(await this.renderCart(user)), undefined, "HTML");
         return;
       }
       if (text === "/cancel") {
         await this.store.updateUser(telegramUserId, { lastPlan: undefined });
-        await this.client.sendMessage(chatId, "Pending action cancelled.");
+        await this.client.sendMessage(chatId, lines([b("Cancelled"), "Pending food action cleared."]), undefined, "HTML");
         return;
       }
       if (/^(confirm|yes)$/i.test(text)) {
         const latest = await this.store.getUser(telegramUserId);
         if (!latest.lastPlan) {
-          await this.client.sendMessage(chatId, "There is no pending order plan. Try `order biryani` first.");
+          await this.client.sendMessage(
+            chatId,
+            lines([b("No pending item"), `Search first, for example ${code("biryani")} or ${code("4 roti and paneer sabzi")}.`]),
+            undefined,
+            "HTML"
+          );
           return;
         }
         const agent = new FoodAgent(this.executor(latest));
-        await this.client.sendMessage(chatId, await agent.confirm(latest.lastPlan));
+        await this.client.sendMessage(chatId, h(await agent.confirm(latest.lastPlan)), undefined, "HTML");
         return;
       }
 
@@ -116,15 +130,21 @@ export class SwiggyTelegramBot {
         }
         await this.client.sendMessage(
           chatId,
-          result.search ? renderSearchPage(result.search) : result.reply,
-          result.search ? searchKeyboard(result.search) : undefined
+          result.search ? renderSearchPage(result.search) : h(result.reply),
+          result.search ? searchKeyboard(result.search) : undefined,
+          "HTML"
         );
         return;
       }
 
-      await this.client.sendMessage(chatId, "I can help with food orders. Try `order biryani`, `/addresses`, or `/status`.");
+      await this.client.sendMessage(
+        chatId,
+        lines([b("Food assistant"), `Try ${code("biryani")}, ${code("4 roti and paneer sabzi")}, ${code("/addresses")}, or ${code("/status")}.`]),
+        undefined,
+        "HTML"
+      );
     } catch (err) {
-      await this.client.sendMessage(chatId, err instanceof Error ? err.message : String(err));
+      await this.client.sendMessage(chatId, lines([b("Something failed"), h(err instanceof Error ? err.message : String(err))]), undefined, "HTML");
     }
   }
 
@@ -145,13 +165,29 @@ export class SwiggyTelegramBot {
         const page = Number(data.slice("food:page:".length));
         const nextSearch = clampSearchPage({ ...user.lastSearch, page });
         await this.store.updateUser(callback.from.id, { lastSearch: nextSearch });
-        if (messageId) await this.client.editMessageText(chatId, messageId, renderSearchPage(nextSearch), searchKeyboard(nextSearch));
+        if (messageId) await this.client.editMessageText(chatId, messageId, renderSearchPage(nextSearch), searchKeyboard(nextSearch), "HTML");
         await this.client.answerCallbackQuery(callback.id);
         return;
       }
 
       if (data.startsWith("food:add:")) {
         const index = Number(data.slice("food:add:".length));
+        if (user.lastSearch.mealOptions?.[index]) {
+          const meal = user.lastSearch.mealOptions[index]!;
+          const agent = new FoodAgent(this.executor(user));
+          const plan = {
+            kind: "food_order" as const,
+            query: user.lastSearch.query,
+            addressId: user.lastSearch.addressId,
+            createdAt: new Date().toISOString(),
+            recommendation: meal.items[0]!.recommendation,
+            items: meal.items,
+          };
+          await this.store.updateUser(callback.from.id, { lastPlan: plan });
+          await this.client.answerCallbackQuery(callback.id, "Adding meal to cart...");
+          await this.client.sendMessage(chatId, h(await agent.confirm(plan)), undefined, "HTML");
+          return;
+        }
         const option = user.lastSearch.options[index];
         if (!option) {
           await this.client.answerCallbackQuery(callback.id, "That item is no longer available in this result set.");
@@ -161,14 +197,26 @@ export class SwiggyTelegramBot {
         const plan = agent.createPlan(user.lastSearch.query, user.lastSearch.addressId, option);
         await this.store.updateUser(callback.from.id, { lastPlan: plan });
         await this.client.answerCallbackQuery(callback.id, "Adding item to cart...");
-        await this.client.sendMessage(chatId, await agent.confirm(plan));
+        await this.client.sendMessage(chatId, h(await agent.confirm(plan)), undefined, "HTML");
+        return;
+      }
+
+      if (data.startsWith("food:detail:")) {
+        const index = Number(data.slice("food:detail:".length));
+        const meal = user.lastSearch.mealOptions?.[index];
+        if (!meal) {
+          await this.client.answerCallbackQuery(callback.id, "Price details expired.");
+          return;
+        }
+        await this.client.answerCallbackQuery(callback.id);
+        await this.client.sendMessage(chatId, renderMealPriceDetails(index + 1, meal), undefined, "HTML");
         return;
       }
 
       await this.client.answerCallbackQuery(callback.id);
     } catch (err) {
       await this.client.answerCallbackQuery(callback.id, "Action failed");
-      await this.client.sendMessage(chatId, err instanceof Error ? err.message : String(err));
+      await this.client.sendMessage(chatId, lines([b("Action failed"), h(err instanceof Error ? err.message : String(err))]), undefined, "HTML");
     }
   }
 
@@ -178,33 +226,33 @@ export class SwiggyTelegramBot {
 
   private async renderStatus(user: TelegramUserProfile): Promise<string> {
     const status = await this.executor(user).authStatus();
-    if (!status.ok) return `Auth status failed: ${status.error.code} ${status.error.message}`;
+    if (!status.ok) return lines([b("Auth status failed"), `${h(status.error.code)}: ${h(status.error.message)}`]);
     const servers = deepFindArray(status.data, ["servers"]) ?? [];
-    const lines = [
-      "Swiggy profile:",
-      `SWIGGY_HOME: ${user.swiggyHome}`,
-      `Address id: ${user.addressId ?? "not set"}`,
-      `Manual address: ${user.manualAddress ?? "not set"}`,
+    const out = [
+      b("Swiggy profile"),
+      `${b("Auth store")}: ${code(user.swiggyHome)}`,
+      `${b("Saved address id")}: ${user.addressId ? code(user.addressId) : "not set"}`,
+      `${b("Manual address")}: ${user.manualAddress ? h(user.manualAddress) : "not set"}`,
       "",
     ];
     for (const row of servers) {
       if (!row || typeof row !== "object") continue;
       const record = row as Record<string, unknown>;
-      lines.push(`${firstString(record, ["server"]) ?? "server"}: ${record.authenticated ? "authenticated" : "not authenticated"}`);
+      out.push(`${b(firstString(record, ["server"]) ?? "server")}: ${record.authenticated ? "authenticated" : "not authenticated"}`);
     }
-    return lines.join("\n");
+    return out.join("\n");
   }
 
   private async renderAddresses(user: TelegramUserProfile): Promise<string> {
     const res = await this.executor(user).addresses();
     if (!res.ok) {
       if (res.error.code === "AUTH_REQUIRED" || res.error.code === "AUTH_FAILED") {
-        return "Food auth is not ready. Send `/auth food`, complete the CLI auth flow, then try `/addresses` again.";
+        return lines([b("Food auth needed"), `Send ${code("/auth food")}, complete browser login, then try ${code("/addresses")} again.`]);
       }
-      return `Could not list addresses: ${res.error.code} ${res.error.message}`;
+      return lines([b("Could not list addresses"), `${h(res.error.code)}: ${h(res.error.message)}`]);
     }
     const addresses = deepFindArray(res.data, ["addresses", "locations", "data"]) ?? [];
-    const lines = ["Saved addresses:"];
+    const out = [b("Saved Swiggy addresses")];
     addresses.forEach((item, index) => {
       if (!item || typeof item !== "object") return;
       const record = item as Record<string, unknown>;
@@ -213,50 +261,58 @@ export class SwiggyTelegramBot {
       const tag = firstString(record, ["addressTag", "addressCategory", "name", "label", "title"]);
       const phone = firstString(record, ["phoneNumber", "phone"]);
       if (id) {
-        lines.push(
+        out.push(
           "",
-          `<b>${index + 1}. ${escapeHtml(tag ?? "Address")}</b>`,
-          escapeHtml(line ?? "Address details not returned"),
-          phone ? `Phone: ${escapeHtml(phone)}` : "",
-          `<code>${escapeHtml(id)}</code>`
+          b(`${index + 1}. ${tag ?? "Address"}`),
+          h(line ?? "Address details not returned"),
+          phone ? `${b("Phone")}: ${h(phone)}` : "",
+          `${b("Use")}: ${code(`/location ${id}`)}`
         );
       }
     });
-    if (lines.length === 1) lines.push("No saved addresses found.");
-    lines.push("", "Set one with <b>/location addressId</b>.");
-    return lines.join("\n");
+    if (out.length === 1) out.push("No saved addresses found.");
+    out.push("", `You can also save display text with ${code("/address <full address>")}.`);
+    return out.join("\n");
   }
 
   private async setLocation(telegramUserId: number, text: string): Promise<string> {
     const value = text.replace(/^\/location\s*/i, "").trim();
-    if (!value) return "Use `/location <addressId>` for saved Swiggy addresses, or `/address <full address>` for manual text.";
+    if (!value) {
+      return lines([
+        b("Set delivery location"),
+        `${b("Saved Swiggy address")}: ${code("/location <addressId>")}`,
+        `${b("Manual address note")}: ${code("/address <full address>")}`,
+        "",
+        `Use ${code("/addresses")} to see saved address ids.`,
+      ]);
+    }
     if (looksLikeAddressId(value)) {
       await this.store.updateUser(telegramUserId, { addressId: value, lastPlan: undefined });
-      return `Delivery address set to ${value}.`;
+      return lines([b("Delivery address selected"), `${b("Address id")}: ${code(value)}`]);
     }
     await this.store.updateUser(telegramUserId, { manualAddress: value, lastPlan: undefined });
     return [
-      "Manual address saved.",
-      value,
+      b("Manual address saved"),
+      h(value),
       "",
-      "For Swiggy Food actions I still need a saved Swiggy address id. Send `/addresses`, then `/location <addressId>`.",
+      `Food search/cart still needs a saved Swiggy address id. Send ${code("/addresses")}, then ${code("/location <addressId>")}.`,
     ].join("\n");
   }
 
   private async setManualAddress(telegramUserId: number, text: string): Promise<string> {
     const value = text.replace(/^\/address\s*/i, "").trim();
-    if (!value) return "Use `/address <full address>` to save address text.";
+    if (!value) return lines([b("Save manual address"), `Use ${code("/address <full address>")}.`]);
     await this.store.updateUser(telegramUserId, { manualAddress: value, lastPlan: undefined });
     return [
-      "Manual address saved.",
-      value,
+      b("Manual address saved"),
+      h(value),
       "",
-      "Swiggy Food still requires one of your saved Swiggy address ids for search/cart. Use `/addresses` and `/location <addressId>`.",
+      `Swiggy Food still requires a saved address id for search/cart. Use ${code("/addresses")} and ${code("/location <addressId>")}.`,
     ].join("\n");
   }
 
   private async renderCart(user: TelegramUserProfile): Promise<string> {
-    if (!user.addressId) return "Set `/location <addressId>` first.";
+    if (!user.addressId) return lines([b("Address needed"), `Set one with ${code("/location <addressId>")} first.`]);
     const res = await this.executor(user).foodCart(user.addressId);
     if (!res.ok) return `Could not fetch cart: ${res.error.code} ${res.error.message}`;
     return renderFoodCartSummary(res.data);
@@ -271,28 +327,60 @@ function clampSearchPage(search: FoodSearchSession): FoodSearchSession {
 }
 
 function renderSearchPage(search: FoodSearchSession): string {
+  if (search.mealOptions?.length) return renderMealSearchPage(search);
   const current = clampSearchPage(search);
   const pageCount = Math.max(1, Math.ceil(current.options.length / PAGE_SIZE));
   const start = current.page * PAGE_SIZE;
   const visible = current.options.slice(start, start + PAGE_SIZE);
   const lines = [
-    `${current.mode === "cheapest" ? "Cheapest matches" : "Food matches"} for "${current.query}"`,
-    `Page ${current.page + 1}/${pageCount}`,
+    b(current.mode === "cheapest" ? "Cheapest matches" : "Food matches"),
+    `${b("Query")}: ${h(current.query)}`,
+    `${b("Page")}: ${current.page + 1}/${pageCount}`,
     "",
   ];
   visible.forEach((item, offset) => {
     lines.push(renderOption(start + offset + 1, item), "");
   });
-  lines.push("Use Add buttons to add a specific item. Use next/prev to browse more.");
+  lines.push("Use the buttons below to add an item or browse more.");
   return lines.join("\n").trim();
+}
+
+function renderMealSearchPage(search: FoodSearchSession): string {
+  const current = clampSearchPage(search);
+  const pageCount = Math.max(1, Math.ceil((current.mealOptions?.length ?? 0) / PAGE_SIZE));
+  const start = current.page * PAGE_SIZE;
+  const visible = (current.mealOptions ?? []).slice(start, start + PAGE_SIZE);
+  const out = [b("Complete meal matches"), `${b("Query")}: ${h(current.query)}`, `${b("Page")}: ${current.page + 1}/${pageCount}`, ""];
+  visible.forEach((meal, offset) => {
+    out.push(b(`${start + offset + 1}. ${meal.restaurantName ?? "Restaurant"}`));
+    for (const item of meal.items) {
+      out.push(`${item.quantity} x ${h(item.recommendation.itemName ?? item.recommendation.title)} - Rs ${Math.round(item.recommendation.estimatedTotal ?? 0)} each`);
+    }
+    out.push(`${b("Estimated total")}: Rs ${Math.round(meal.estimatedTotal)}`, "");
+  });
+  out.push("Use Add Meal to add all items with quantities. Use Price to see calculation.");
+  return out.join("\n").trim();
+}
+
+function renderMealPriceDetails(index: number, meal: NonNullable<FoodSearchSession["mealOptions"]>[number]): string {
+  const out = [b(`Price details for meal ${index}`), meal.restaurantName ? `${b("Restaurant")}: ${h(meal.restaurantName)}` : undefined, ""].filter(
+    (line): line is string => Boolean(line)
+  );
+  for (const item of meal.items) {
+    const unit = Math.round(item.recommendation.estimatedTotal ?? 0);
+    out.push(`${item.quantity} x ${h(item.recommendation.itemName ?? item.recommendation.title)} = Rs ${unit * item.quantity}`);
+  }
+  out.push("", `${b("Estimated item total")}: Rs ${Math.round(meal.estimatedTotal)}`);
+  out.push("Taxes, delivery, platform fee, packaging, and payment offers depend on the final Swiggy cart response.");
+  return out.join("\n");
 }
 
 function renderOption(index: number, item: FoodRecommendation): string {
   const parts = [
-    `${index}. ${item.itemName ?? item.title}`,
-    item.restaurantName ? `from ${item.restaurantName}` : undefined,
-    item.estimatedTotal !== undefined ? `Rs ${Math.round(item.estimatedTotal)}` : undefined,
-    item.rating ? `rating ${item.rating}` : undefined,
+    b(`${index}. ${item.itemName ?? item.title}`),
+    item.restaurantName ? `from ${h(item.restaurantName)}` : undefined,
+    item.estimatedTotal !== undefined ? `${b("Price")}: Rs ${Math.round(item.estimatedTotal)}` : undefined,
+    item.rating ? `${b("Rating")}: ${h(item.rating)}` : undefined,
   ].filter(Boolean);
   return parts.join("\n");
 }
@@ -300,17 +388,24 @@ function renderOption(index: number, item: FoodRecommendation): string {
 function searchKeyboard(search: FoodSearchSession): unknown {
   const current = clampSearchPage(search);
   const pageCount = Math.max(1, Math.ceil(current.options.length / PAGE_SIZE));
+  const total = current.mealOptions?.length ?? current.options.length;
+  const mealMode = Boolean(current.mealOptions?.length);
   const start = current.page * PAGE_SIZE;
-  const visible = current.options.slice(start, start + PAGE_SIZE);
-  const rows = visible.map((_, offset) => [
-    {
-      text: `Add ${start + offset + 1}`,
-      callback_data: `food:add:${start + offset}`,
-    },
-  ]);
+  const visible = (mealMode ? current.mealOptions! : current.options).slice(start, start + PAGE_SIZE);
+  const rows = visible.map((_, offset) => {
+    const index = start + offset;
+    const row = [
+      {
+        text: `${mealMode ? "Add Meal" : "Add"} ${index + 1}`,
+        callback_data: `food:add:${index}`,
+      },
+    ];
+    if (mealMode) row.push({ text: `Price ${index + 1}`, callback_data: `food:detail:${index}` });
+    return row;
+  });
   const nav = [];
   if (current.page > 0) nav.push({ text: "Prev", callback_data: `food:page:${current.page - 1}` });
-  if (current.page < pageCount - 1) nav.push({ text: "Next", callback_data: `food:page:${current.page + 1}` });
+  if (start + PAGE_SIZE < total) nav.push({ text: "Next", callback_data: `food:page:${current.page + 1}` });
   if (nav.length > 0) rows.push(nav);
   return { inline_keyboard: rows };
 }
@@ -326,19 +421,21 @@ function parseFoodQuery(text: string): { query: string; mode: FoodSearchMode } |
 
 function helpText(user: TelegramUserProfile): string {
   return [
-    "Swiggy Telegram agent",
+    b("Swiggy food assistant"),
     "",
-    "Commands:",
-    "`/auth food` - show the per-user auth command",
-    "`/status` - check auth and selected address",
-    "`/addresses` - list saved Swiggy addresses",
-    "`/location <addressId>` - set delivery address",
-    "`/address <full address>` - save manual address text",
-    "`order biryani` - find the best-value matching food item",
-    "`/cart` - inspect cart",
-    "`/cancel` - clear pending action",
+    b("Commands"),
+    `${code("/auth food")} - link Swiggy Food`,
+    `${code("/init")} - show this agent setup`,
+    `${code("/status")} - auth and address status`,
+    `${code("/addresses")} - saved Swiggy addresses`,
+    `${code("/location <addressId>")} - choose delivery address`,
+    `${code("/address <full address>")} - save manual address text`,
+    `${code("biryani")} - browse food matches`,
+    `${code("4 roti and paneer sabzi")} - build a same-restaurant meal`,
+    `${code("/cart")} - inspect cart`,
+    `${code("/cancel")} - clear pending action`,
     "",
-    `Your isolated SWIGGY_HOME is ${user.swiggyHome}`,
+    `${b("Profile")}: ${code(user.swiggyHome)}`,
   ].join("\n");
 }
 
@@ -346,17 +443,15 @@ function looksLikeAddressId(value: string): boolean {
   return /^[a-z0-9_-]{8,}$/i.test(value) && !/\s/.test(value);
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 function authText(executor: SwiggyCliExecutor, server: string): string {
   return [
-    "Run this on the bot host to link this Telegram profile:",
+    b("Link Swiggy profile"),
+    "Run this on the bot host:",
     "",
-    `\`${executor.authCommand(server)}\``,
+    code(executor.authCommand(server)),
     "",
-    "After the browser flow finishes, send `/status` here. For a remote phone browser, run the command on the host machine because the current Swiggy OAuth flow uses a local loopback callback.",
+    `After browser login, send ${code("/status")} here.`,
+    "The OAuth callback is local, so run this on the machine hosting the bot.",
   ].join("\n");
 }
 

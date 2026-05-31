@@ -1,4 +1,4 @@
-import type { FoodPlanItem, FoodRecommendation, FoodSearchMode, FoodSearchSession, PendingFoodPlan, TelegramUserProfile } from "../bot/types.js";
+import type { FoodMealOption, FoodPlanItem, FoodRecommendation, FoodSearchMode, FoodSearchSession, PendingFoodPlan, TelegramUserProfile } from "../bot/types.js";
 import { SwiggyCliExecutor } from "./cliExecutor.js";
 import { renderFoodCartSummary } from "./cartSummary.js";
 import { deepFindArray, firstNumber, firstString, formatMoney } from "./jsonHeuristics.js";
@@ -136,11 +136,8 @@ export class FoodAgent {
   ): Promise<FoodAgentResult | undefined> {
     if (!user.addressId) return undefined;
     const addressId = user.addressId;
-    const restaurantQuery = components.map((c) => c.query).join(" ");
-    const restaurants = await this.executor.call("food", "search_restaurants", { query: restaurantQuery, addressId });
-    if (!restaurants.ok) return undefined;
-    const restaurantCandidates = extractRestaurantCandidates(restaurants.data).slice(0, 6);
-    const matches: Array<{ restaurant: MenuCandidate; items: FoodPlanItem[]; total: number; score: number }> = [];
+    const restaurantCandidates = await this.discoverCompositeRestaurants(components, addressId);
+    const matches: Array<FoodMealOption & { score: number }> = [];
     for (const restaurant of restaurantCandidates) {
       if (!restaurant.restaurantId) continue;
       const menu = await this.executor
@@ -165,13 +162,15 @@ export class FoodAgent {
       if (planItems.length !== components.length) continue;
       const total = sumPlanEstimate(planItems);
       matches.push({
-        restaurant,
+        restaurantName: restaurant.restaurantName,
+        restaurantId: restaurant.restaurantId,
         items: planItems,
-        total,
+        estimatedTotal: total,
         score: total + averageRatingPenalty(planItems),
       });
     }
-    const best = matches.sort((a, b) => (mode === "cheapest" ? a.total - b.total : a.score - b.score))[0];
+    matches.sort((a, b) => (mode === "cheapest" ? a.estimatedTotal - b.estimatedTotal : a.score - b.score));
+    const best = matches[0];
     if (!best) return undefined;
     const primary = best.items[0]!.recommendation;
     const plan: PendingFoodPlan = {
@@ -184,8 +183,42 @@ export class FoodAgent {
     };
     return {
       plan,
-      reply: renderCompositeRecommendation(query, best.items, best.restaurant.restaurantName, matches.length),
+      search: {
+        kind: "food_search",
+        query,
+        mode,
+        addressId,
+        page: 0,
+        options: matches.flatMap((match) => match.items.map((item) => item.recommendation)),
+        mealOptions: matches.slice(0, 8),
+        createdAt: new Date().toISOString(),
+      },
+      reply: renderCompositeRecommendation(query, best.items, best.restaurantName, matches.length),
     };
+  }
+
+  private async discoverCompositeRestaurants(components: FoodComponent[], addressId: string): Promise<MenuCandidate[]> {
+    const queries = [
+      components.map((c) => c.query).join(" "),
+      components.filter((c) => !c.keywords.includes("egg")).map((c) => c.query).join(" "),
+      "north indian",
+      "roti paneer",
+      "egg curry",
+    ].filter((query, index, arr) => query.trim().length > 0 && arr.indexOf(query) === index);
+    const seen = new Set<string>();
+    const out: MenuCandidate[] = [];
+    for (const query of queries) {
+      const result = await this.executor.call("food", "search_restaurants", { query, addressId }).catch(() => undefined);
+      if (!result?.ok) continue;
+      for (const restaurant of extractRestaurantCandidates(result.data)) {
+        const key = restaurant.restaurantId ?? restaurant.restaurantName;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(restaurant);
+        if (out.length >= 12) return out;
+      }
+    }
+    return out;
   }
 
   private errorReply(code: string, message: string): string {
@@ -227,6 +260,7 @@ interface FoodComponent {
   query: string;
   quantity: number;
   keywords: string[];
+  avoidKeywords: string[];
 }
 
 function parseCompositeRequest(query: string): FoodComponent[] {
@@ -250,25 +284,55 @@ function parseCompositeRequest(query: string): FoodComponent[] {
       query: cleaned,
       quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
       keywords: expandComponentKeywords(cleaned),
+      avoidKeywords: avoidComponentKeywords(cleaned),
     };
   });
 }
 
 function expandComponentKeywords(query: string): string[] {
   const tokens = query.split(/\s+/).filter((token) => !["sabzi", "curry", "gravy"].includes(token));
-  if (tokens.includes("roti")) return ["roti", "chapati", "phulka", "paratha", "tawa"];
+  if (tokens.includes("roti")) return ["roti", "chapati", "phulka"];
   if (tokens.includes("paneer")) return ["paneer"];
+  if (tokens.includes("egg")) return ["egg"];
   return tokens;
 }
 
+function avoidComponentKeywords(query: string): string[] {
+  const tokens = query.split(/\s+/);
+  if (tokens.includes("roti")) {
+    return ["sabzi", "sabji", "curry", "gravy", "combo", "meal", "thali", "egg", "omlet", "omelet", "omelette", "chicken", "paneer"];
+  }
+  if (tokens.includes("egg")) return ["biryani", "rice", "roll", "combo", "meal", "thali"];
+  return [];
+}
+
 function bestComponentMatch(candidates: MenuCandidate[], component: FoodComponent, mode: FoodSearchMode): MenuCandidate | undefined {
-  const matches = candidates.filter((candidate) => {
+  let matches = candidates.filter((candidate) => {
     const name = (candidate.itemName ?? "").toLowerCase();
     return component.keywords.some((keyword) => name.includes(keyword));
   });
+  const cleanMatches = matches.filter((candidate) => {
+    const name = (candidate.itemName ?? "").toLowerCase();
+    return !component.avoidKeywords.some((keyword) => name.includes(keyword));
+  });
+  if (cleanMatches.length > 0) matches = cleanMatches;
+  if (matches.length === 0 && component.query.includes("roti")) {
+    matches = candidates.filter((candidate) => {
+      const name = (candidate.itemName ?? "").toLowerCase();
+      return ["paratha", "tawa"].some((keyword) => name.includes(keyword));
+    });
+  }
   return matches
     .map((candidate) => scoreCandidate(candidate))
-    .sort((a, b) => compareCandidates(a, b, mode))[0];
+    .sort((a, b) => componentScore(a, component, mode) - componentScore(b, component, mode))[0];
+}
+
+function componentScore(candidate: ScoredCandidate, component: FoodComponent, mode: FoodSearchMode): number {
+  const name = (candidate.itemName ?? "").toLowerCase();
+  const avoidPenalty = component.avoidKeywords.some((keyword) => name.includes(keyword)) ? 500 : 0;
+  const repeatedItemPenalty = component.quantity > 1 && (candidate.estimatedTotal ?? 0) > 80 ? 200 : 0;
+  const base = mode === "cheapest" ? candidate.estimatedTotal ?? Number.POSITIVE_INFINITY : valueScore(candidate);
+  return base + avoidPenalty + repeatedItemPenalty;
 }
 
 function sumPlanEstimate(items: FoodPlanItem[]): number {
