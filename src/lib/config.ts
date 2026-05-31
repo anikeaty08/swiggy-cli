@@ -53,5 +53,11 @@ export async function getCurrentProfile(selectedProfile?: string): Promise<{ nam
 }
 
 export function endpointFor(server: ServerName, profile: ProfileConfig): string {
-  return profile.endpoints?.[server] || process.env[`SWIGGY_${server.toUpperCase()}_URL`] || DEFAULT_ENDPOINTS[server];
+  const envName = profile.activeEndpointEnvironment;
+  return (
+    (envName ? profile.endpointEnvironments?.[envName]?.[server] : undefined) ||
+    profile.endpoints?.[server] ||
+    process.env[`SWIGGY_${server.toUpperCase()}_URL`] ||
+    DEFAULT_ENDPOINTS[server]
+  );
 }

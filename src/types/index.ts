@@ -34,6 +34,7 @@ export interface OutputOptions {
   noInteractive?: boolean;
   yes?: boolean;
   profile?: string;
+  warnings?: string[];
 }
 
 export interface McpTool {
@@ -72,6 +73,10 @@ export interface ProfileConfig {
   defaultCity?: string;
   output?: "human" | "json" | "plain";
   endpoints?: Partial<Record<ServerName, string>>;
+  endpointEnvironments?: Record<string, Partial<Record<ServerName, string>>>;
+  activeEndpointEnvironment?: string;
+  defaultAddressIds?: Partial<Record<ServerName, string>>;
+  noInteractive?: boolean;
 }
 
 export interface RootConfig {

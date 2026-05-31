@@ -276,7 +276,7 @@ src/
   types/
 test/
 skills/
-wiki/
+docs/
 ```
 
 Key areas:
@@ -316,13 +316,13 @@ npx -p swiggy-cli swiggy --help
 
 ## Docs
 
-Additional docs live in [`wiki/`](./wiki):
+Additional docs live in [`docs/`](./docs):
 
-- `wiki/architecture.md`
-- `wiki/auth.md`
-- `wiki/commands.md`
-- `wiki/output-contract.md`
-- `wiki/troubleshooting.md`
+- `docs/architecture.md`
+- `docs/auth.md`
+- `docs/commands.md`
+- `docs/output-contract.md`
+- `docs/troubleshooting.md`
 
 ## License
 

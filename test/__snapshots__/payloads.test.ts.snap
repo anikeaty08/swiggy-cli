@@ -1,0 +1,90 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ergonomic command payload contracts > dineout details matches the pinned payload 1`] = `
+{
+  "latitude": 12.97,
+  "longitude": 77.59,
+  "restaurantId": "rest_1",
+}
+`;
+
+exports[`ergonomic command payload contracts > dineout search matches the pinned payload 1`] = `
+{
+  "entityType": "CUISINE",
+  "latitude": 12.97,
+  "longitude": 77.59,
+  "query": "italian",
+}
+`;
+
+exports[`ergonomic command payload contracts > dineout slots matches the pinned payload 1`] = `
+{
+  "date": "2026-06-01",
+  "latitude": 12.97,
+  "longitude": 77.59,
+  "restaurantId": "rest_1",
+}
+`;
+
+exports[`ergonomic command payload contracts > dineout status matches the pinned payload 1`] = `
+{
+  "orderId": "book_1",
+}
+`;
+
+exports[`ergonomic command payload contracts > food add-to-cart matches the pinned payload 1`] = `
+{
+  "addressId": "addr_1",
+  "cartItems": [
+    {
+      "itemId": "item_1",
+      "quantity": 2,
+    },
+  ],
+  "restaurantId": "rest_1",
+  "restaurantName": "A2B",
+}
+`;
+
+exports[`ergonomic command payload contracts > food checkout matches the pinned payload 1`] = `
+{
+  "addressId": "addr_1",
+  "paymentMethod": "COD",
+}
+`;
+
+exports[`ergonomic command payload contracts > food menu matches the pinned payload 1`] = `
+{
+  "addressId": "addr_1",
+  "page": 2,
+  "pageSize": 10,
+  "restaurantId": "rest_1",
+}
+`;
+
+exports[`ergonomic command payload contracts > instamart add-to-cart matches the pinned payload 1`] = `
+{
+  "items": [
+    {
+      "quantity": 3,
+      "spinId": "spin_1",
+    },
+  ],
+  "selectedAddressId": "addr_1",
+}
+`;
+
+exports[`ergonomic command payload contracts > instamart checkout matches the pinned payload 1`] = `
+{
+  "addressId": "addr_1",
+  "paymentMethod": "COD",
+}
+`;
+
+exports[`ergonomic command payload contracts > instamart track matches the pinned payload 1`] = `
+{
+  "lat": 12.97,
+  "lng": 77.59,
+  "orderId": "ord_1",
+}
+`;

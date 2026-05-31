@@ -5,13 +5,13 @@
   "type": "module",
   "license": "MIT",
   "author": "swiggy-cli contributors",
-  "homepage": "https://github.com/HKTITAN/swiggy-cli",
+  "homepage": "https://github.com/anikeaty08/swiggy-cli",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/HKTITAN/swiggy-cli.git"
+    "url": "git+https://github.com/anikeaty08/swiggy-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/HKTITAN/swiggy-cli/issues"
+    "url": "https://github.com/anikeaty08/swiggy-cli/issues"
   },
   "keywords": [
     "swiggy",
@@ -37,7 +37,7 @@
     "README.md",
     "AGENTS.md",
     "CHANGELOG.md",
-    "wiki",
+    "docs",
     "skills",
     "LICENSE"
   ],

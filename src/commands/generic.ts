@@ -6,6 +6,7 @@ import { renderError, renderResult, startSpinner } from "../lib/output.js";
 import { SERVER_NAMES, type ServerName } from "../types/index.js";
 import { CliError, UsageError } from "../lib/errors.js";
 import { TOOL_CATALOG } from "../lib/aliases.js";
+import { validateToolInput } from "../lib/schema.js";
 
 export function buildGenericCommands(program: Command): void {
   attachOutputOptions(
@@ -96,7 +97,26 @@ export function buildGenericCommands(program: Command): void {
           } else if (localOpts.input) {
             args = parseJsonInput(localOpts.input);
           }
-          await callTool(server, tool, args, opts);
+          let callOpts = opts;
+          try {
+            const { profile } = await getCurrentProfile(opts.profile);
+            const client = new McpClient({ server, profile });
+            const schema = await client.getToolSchema(tool);
+            if (!schema) throw new CliError("NOT_FOUND", `Tool "${tool}" not found on server "${server}".`);
+            const validation = validateToolInput(server, tool, args, schema.inputSchema);
+            if (!validation.ok) {
+              throw new UsageError(`Invalid arguments for ${server}/${tool}: ${validation.errors.join("; ")}`);
+            }
+          } catch (err) {
+            if (err instanceof CliError && (err.code === "USAGE" || err.code === "NOT_FOUND")) throw err;
+            const warning = `Could not validate ${server}/${tool} against live schema; calling tool anyway.`;
+            if (opts.json || opts.raw) {
+              callOpts = { ...opts, warnings: [warning] };
+            } else if (!opts.quiet) {
+              process.stderr.write(`warning: ${warning}\n`);
+            }
+          }
+          await callTool(server, tool, args, callOpts);
         } catch (err) {
           process.exitCode = renderError(err, { ...opts, server, tool });
         }

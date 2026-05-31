@@ -1,6 +1,6 @@
-# swiggy-cli wiki
+# swiggy-cli docs
 
-This wiki is the durable, deeply-linked knowledge base for the project. It is written for two audiences:
+These docs are the durable, deeply-linked knowledge base for the project. They are written for two audiences:
 
 - **Humans** browsing on GitHub.
 - **Agents** that load these markdown files into context.

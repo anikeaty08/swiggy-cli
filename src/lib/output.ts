@@ -64,7 +64,7 @@ export function renderResult<T>(
     server: ctx.server,
     tool: ctx.tool,
     data,
-    meta: { profile: ctx.profile },
+    meta: { profile: ctx.profile, ...(ctx.warnings?.length ? { warnings: ctx.warnings } : {}) },
   };
   if (ctx.json) return renderJson(envelope);
   if (ctx.plain) return renderPlain(envelope);

@@ -98,7 +98,7 @@ export class McpClient {
       const text = await res.text();
       if (!text) {
         if (!res.ok) throw new NetworkError(`HTTP ${res.status} from ${this.url}`);
-        return undefined as T;
+        throw new McpProtocolError("Empty response from server.");
       }
       try {
         payload = JSON.parse(text) as JsonRpcResponse<T>;

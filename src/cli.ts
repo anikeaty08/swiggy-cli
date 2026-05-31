@@ -38,16 +38,16 @@ program
   .addHelpText(
     "after",
     `\nExamples:\n` +
-      `  $ swiggy food search-restaurants --query "biryani" --city Delhi\n` +
+      `  $ swiggy food search-restaurants --query "biryani" --address-id addr_123\n` +
       `  $ swiggy instamart search --query "milk bread eggs" --json\n` +
-      `  $ swiggy dineout search --query "italian" --city Delhi\n` +
+      `  $ swiggy dineout search --query "italian" --lat 12.9716 --lng 77.5946\n` +
       `  $ swiggy servers --json\n` +
       `  $ swiggy tools food | head\n` +
       `  $ swiggy schema food search_restaurants\n` +
       `  $ swiggy call food search_restaurants --input '{"query":"pizza"}'\n` +
       `  $ swiggy auth init --server food\n` +
       `  $ swiggy doctor\n\n` +
-      `Docs: see README.md and ./wiki/`
+      `Docs: see README.md and ./docs/`
   );
 
 buildGenericCommands(program);
