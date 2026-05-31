@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { TOOL_CATALOG, ERGONOMIC_ALIASES, DESTRUCTIVE_TOOLS } from "../src/lib/aliases.js";
 import { EXIT_CODE, CliError } from "../src/lib/errors.js";
 import { renderJson } from "../src/lib/renderers/json.js";
+import { SCHEMA_FIXTURES } from "../src/lib/schema.js";
 
 describe("aliases", () => {
   it("every alias points to a real tool in the catalog", () => {
@@ -22,6 +23,15 @@ describe("aliases", () => {
     expect(TOOL_CATALOG.food.length).toBe(14);
     expect(TOOL_CATALOG.instamart.length).toBe(13);
     expect(TOOL_CATALOG.dineout.length).toBe(8);
+  });
+
+  it("every catalog tool has a cached schema fixture", () => {
+    for (const [server, tools] of Object.entries(TOOL_CATALOG)) {
+      const schemas = SCHEMA_FIXTURES[server as keyof typeof SCHEMA_FIXTURES];
+      for (const tool of tools) {
+        expect(schemas[tool], `${server}/${tool}`).toBeTruthy();
+      }
+    }
   });
 });
 

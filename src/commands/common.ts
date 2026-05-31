@@ -24,7 +24,9 @@ export function attachOutputOptions(cmd: Command): Command {
     .option("--profile <name>", "use a named profile");
 }
 
-export interface ExecOpts extends OutputOptions {}
+export interface ExecOpts extends OutputOptions {
+  skipCachedValidation?: boolean;
+}
 
 export function readGlobalOpts(cmd: Command): ExecOpts {
   const o = cmd.optsWithGlobals<ExecOpts>();
@@ -63,17 +65,21 @@ export async function callTool(
   humanRenderer?: (data: unknown, ctx: ExecOpts & { server?: string; tool?: string }) => void
 ): Promise<void> {
   try {
-    const validation = validateToolInput(server, tool, args);
-    if (!validation.ok) {
-      throw new UsageError(`Invalid arguments for ${server}/${tool}: ${validation.errors.join("; ")}`);
-    }
-    if (DESTRUCTIVE_TOOLS.has(tool)) {
-      await confirm(`Run destructive tool "${tool}" on ${server}`, opts);
+    if (!opts.skipCachedValidation) {
+      const validation = validateToolInput(server, tool, args);
+      if (!validation.ok) {
+        throw new UsageError(`Invalid arguments for ${server}/${tool}: ${validation.errors.join("; ")}`);
+      }
     }
     const { profile, name: profileName } = await getCurrentProfile(opts.profile);
     const ctx = { ...opts, server, tool, profile: opts.profile || profileName };
     const sp = startSpinner(`${brand("swiggy", opts)} · calling ${server}/${tool}…`, opts);
     const client = new McpClient({ server, profile });
+    if (DESTRUCTIVE_TOOLS.has(tool)) {
+      sp?.stop();
+      await renderDestructivePreview(server, tool, args, opts, client);
+      await confirm(`Run destructive tool "${tool}" on ${server}`, opts);
+    }
     let result;
     try {
       result = await client.callTool(tool, args);
@@ -90,6 +96,43 @@ export async function callTool(
     const code = renderError(err, { ...opts, server, tool });
     process.exitCode = code;
   }
+}
+
+async function renderDestructivePreview(
+  server: ServerName,
+  tool: string,
+  args: unknown,
+  opts: ExecOpts,
+  client: McpClient
+): Promise<void> {
+  if (isMachineMode(opts) || opts.quiet) return;
+  process.stderr.write(`\nReview before ${server}/${tool}:\n`);
+  try {
+    if (server === "food" && (tool === "place_food_order" || tool === "flush_food_cart")) {
+      const result = await client.callTool("get_food_cart", pickKeys(args, ["addressId", "restaurantName"]));
+      renderToolHuman(extractToolPayload(result), { ...opts, server, tool: "get_food_cart" });
+      return;
+    }
+    if (server === "instamart" && (tool === "checkout" || tool === "clear_cart")) {
+      const result = await client.callTool("get_cart", {});
+      renderToolHuman(extractToolPayload(result), { ...opts, server, tool: "get_cart" });
+      return;
+    }
+    process.stderr.write(`${JSON.stringify(args, null, 2)}\n`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`Could not load current summary before confirmation: ${message}\n`);
+  }
+}
+
+function pickKeys(source: unknown, keys: string[]): Record<string, unknown> {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return {};
+  const record = source as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (record[key] !== undefined) out[key] = record[key];
+  }
+  return out;
 }
 
 export function parseJsonInput(input: string, flagName = "--input"): unknown {

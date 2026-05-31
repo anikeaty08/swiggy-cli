@@ -128,7 +128,7 @@ export function buildGenericCommands(program: Command): void {
               process.stderr.write(`warning: ${warning}\n`);
             }
           }
-          await callTool(server, tool, args, callOpts);
+          await callTool(server, tool, args, { ...callOpts, skipCachedValidation: true });
         } catch (err) {
           process.exitCode = renderError(err, { ...opts, server, tool });
         }

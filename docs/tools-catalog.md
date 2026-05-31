@@ -2,7 +2,7 @@
 
 Verified against [https://mcp.swiggy.com/builders/docs/reference/](https://mcp.swiggy.com/builders/docs/reference/) on **2026-04-28** (35 tools across 3 servers).
 
-> Tool names are verbatim. Parameter shapes are not yet pinned in the public reference; this CLI fetches them at runtime via `tools/list`. If you need them right now, run `swiggy schema <server> <tool> --json`.
+> Tool names are verbatim. The CLI keeps conservative cached schema fixtures for offline tests and validates generic calls against live schemas when available. To inspect the upstream contract, run `swiggy schema <server> <tool> --json`.
 
 ## Food (`https://mcp.swiggy.com/food`) — 14 tools
 

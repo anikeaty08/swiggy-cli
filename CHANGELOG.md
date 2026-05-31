@@ -11,7 +11,12 @@ All notable changes to `swiggy-cli` are documented here. The format follows [Kee
 - Stable JSON envelope, deterministic exit codes, TSV plain-mode renderer.
 - OAuth 2.0 + PKCE flow with `--client-id` / `SWIGGY_OAUTH_CLIENT_ID` (no dynamic client registration upstream).
 - Profiles, doctor, config, auth subcommands.
-- Wiki, AGENTS.md, agent-skills (`skills/*/SKILL.md`).
+- Docs, AGENTS.md, agent-skills (`skills/*/SKILL.md`).
 - GitHub Actions CI + tag-based release pipeline with npm provenance.
+- Snapshot contract tests for high-risk ergonomic payloads.
+- Cached schema fixtures for every known MCP tool, with live schema validation for generic calls.
+- Machine-mode CLI tests, mocked MCP transport tests, and auth refresh tests.
+- Human-mode renderers and destructive preflight summaries before checkout, cart clearing, booking, and address deletion.
+- Shell completion helper: `swiggy completion bash|zsh|fish`.
 
-[Unreleased]: https://github.com/HKTITAN/swiggy-cli/compare/HEAD...HEAD
+[Unreleased]: https://github.com/anikeaty08/swiggy-cli/compare/HEAD...HEAD

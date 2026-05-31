@@ -5,7 +5,7 @@ Thanks for considering a contribution! This is a community CLI for the official 
 ## Quick start
 
 ```bash
-git clone https://github.com/HKTITAN/swiggy-cli.git
+git clone https://github.com/anikeaty08/swiggy-cli.git
 cd swiggy-cli
 npm ci
 npm run dev -- --help     # tsx-powered watcher equivalent
@@ -46,7 +46,7 @@ Every command must produce a structured envelope before rendering. The JSON shap
 ## Tests
 
 - `vitest` smoke tests are in `test/smoke.test.ts`. They verify alias integrity, error contract, and renderer determinism.
-- Network-touching code is not unit-tested in CI (it would require a live Swiggy account). Manual smoke against a real account is preferred.
+- Network-touching code is covered with mocked MCP/auth tests in CI. Manual smoke against a real account is still recommended before release.
 
 ## Commit style
 

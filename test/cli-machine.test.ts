@@ -97,4 +97,37 @@ describe("CLI machine mode", () => {
       },
     });
   });
+
+  it("config path --json is an auth-free README example with a JSON envelope", () => {
+    const result = runCli(["config", "path", "--json", "--no-interactive"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+
+    const envelope = parseSingleJsonEnvelope(result.stdout);
+    expect(envelope).toMatchObject({
+      ok: true,
+      data: {
+        configFile: expect.stringContaining("config.json"),
+        authFile: expect.stringContaining("auth.json"),
+      },
+    });
+  });
+
+  it("--help stays auth-free and does not emit machine JSON", () => {
+    const result = runCli(["--help"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Usage:");
+    expect(result.stdout).toContain("swiggy servers --json");
+  });
+
+  it("completion prints shell setup without network access", () => {
+    const result = runCli(["completion", "bash"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("complete");
+    expect(result.stdout).toContain("swiggy");
+  });
 });

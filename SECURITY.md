@@ -12,7 +12,7 @@ We're pre-1.0. Once 1.0 ships, the latest minor will be supported, plus the prev
 
 **Do not open a public issue.** Instead:
 
-- Use [GitHub's private vulnerability reporting](https://github.com/HKTITAN/swiggy-cli/security/advisories/new) — preferred.
+- Use [GitHub's private vulnerability reporting](https://github.com/anikeaty08/swiggy-cli/security/advisories/new) - preferred.
 - Or reach the maintainer through a private channel listed on the repo profile.
 
 Please include:

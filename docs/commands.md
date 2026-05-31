@@ -83,6 +83,7 @@ Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`,
 | `swiggy profile delete <name>`            | remove profile (cannot delete `default`)  |
 | `swiggy profile set <name> <key> <value>` | tweak a profile field                     |
 | `swiggy doctor`                           | full self-check — exits non-zero on issue |
+| `swiggy completion [shell]`               | print shell completion setup              |
 
 
-⚠ = destructive. Requires `--yes` in non-interactive mode (exit `7` otherwise).
+Destructive commands require `--yes` in non-interactive mode (exit `7` otherwise). In human mode, destructive commerce commands print a best-effort summary before asking for confirmation.

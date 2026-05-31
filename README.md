@@ -225,6 +225,16 @@ swiggy profile use work
 swiggy --profile work food addresses
 ```
 
+## Shell Completion
+
+Generate shell completion setup:
+
+```bash
+swiggy completion bash
+swiggy completion zsh
+swiggy completion fish
+```
+
 ## Safety
 
 This CLI is wired to real commerce actions. It should behave like it.
@@ -237,6 +247,8 @@ These commands require confirmation in normal use, or `--yes` in machine mode:
 - `instamart clear-cart`
 - `instamart checkout`
 - `dineout book`
+
+In human mode, checkout, booking, cart clearing, and address deletion print a best-effort summary before asking for confirmation.
 
 Operational rules:
 
@@ -252,6 +264,7 @@ Scripts:
 npm run build
 npm run lint
 npm test
+npm run pack:check
 ```
 
 Run locally:

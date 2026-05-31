@@ -40,6 +40,8 @@ Both layers share the same `McpClient` and renderer pipeline. Layer A is just su
 | `src/lib/aliases.ts`                           | verified upstream tool catalog + ergonomic alias table        |
 | `src/lib/output.ts`                            | renderer orchestration, brand color, spinner gating           |
 | `src/lib/renderers/{human,json,plain}.ts`      | three deterministic output renderers                          |
+| `src/lib/schema.ts`                            | cached schema fixtures and lightweight argument validation     |
+| `src/lib/payloads.ts`                          | testable ergonomic command payload builders                    |
 | `src/lib/errors.ts`                            | typed `CliError` classes + stable exit code map               |
 | `src/lib/tty.ts`                               | machine-mode / color detection                                |
 
@@ -47,9 +49,8 @@ Both layers share the same `McpClient` and renderer pipeline. Layer A is just su
 ## Design tenets
 
 1. **Structured first, rendered second.** Every command builds an envelope; renderers are pure functions of that envelope. This is what makes `--json` honest — the human and JSON paths cannot diverge.
-2. **Discover, don't hardcode.** Tool schemas are pulled from the server, not vendored.
+2. **Validate conservatively.** Generic calls prefer live schemas; cached fixtures keep tests deterministic and protect high-risk ergonomic commands when offline.
 3. **Stable contracts.** Error codes, exit codes, and JSON shapes are documented and won't change without a major version.
 4. **Zero magic for agents.** No interactive prompts, no colors, no spinners when machine mode is detected (`--json`, `--plain`, `--no-interactive`, or non-TTY).
 5. **Least secret surface.** Tokens are stored at `~/.swiggy/auth.json` (mode `0600`). Never in env or argv.
 6. **Brand restraint.** Swiggy orange (`#FC8019`) is used only for the program name, headings, and table headers — never for body data.
-

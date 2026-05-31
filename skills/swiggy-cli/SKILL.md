@@ -67,6 +67,6 @@ Failure:
 
 ## References
 
-- Source: <https://github.com/HKTITAN/swiggy-cli>
+- Source: <https://github.com/anikeaty08/swiggy-cli>
 - Official MCP manifest: <https://github.com/Swiggy/swiggy-mcp-server-manifest>
 - Official builder docs: <https://mcp.swiggy.com/builders/docs/>
