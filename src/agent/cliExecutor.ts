@@ -67,6 +67,10 @@ export class SwiggyCliExecutor {
     return this.run(["food", "apply-coupon", code]);
   }
 
+  async foodTrackOrder(orderId: string): Promise<CliEnvelope> {
+    return this.run(["food", "track", orderId]);
+  }
+
   async call(server: ServerName, tool: string, input: unknown): Promise<CliEnvelope> {
     return this.run(["call", server, tool, "--input", JSON.stringify(input)]);
   }
@@ -95,7 +99,21 @@ export class SwiggyCliExecutor {
       if (e.stdout) return { stdout: e.stdout };
       throw new Error(e.stderr || e.message || String(err));
     });
-    return JSON.parse(stdout) as CliEnvelope;
+    const parsed = JSON.parse(stdout) as CliEnvelope;
+    if (!parsed.ok && parsed.error.code === "NETWORK" && /429/.test(parsed.error.message)) {
+      await sleep(2_000);
+      const retry = await execFileAsync(target.file, [...target.prefixArgs, ...allArgs], {
+        env,
+        maxBuffer: 1024 * 1024 * 10,
+        windowsHide: true,
+      }).catch((err: unknown) => {
+        const e = err as { stdout?: string; stderr?: string; message?: string };
+        if (e.stdout) return { stdout: e.stdout };
+        throw new Error(e.stderr || e.message || String(err));
+      });
+      return JSON.parse(retry.stdout) as CliEnvelope;
+    }
+    return parsed;
   }
 
   private resolveCommand(): { file: string; prefixArgs: string[] } {
@@ -115,4 +133,8 @@ export class SwiggyCliExecutor {
 
 function quote(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

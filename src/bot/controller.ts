@@ -3,7 +3,8 @@ import { TelegramBotStore } from "./store.js";
 import { TelegramClient } from "./telegram.js";
 import { SwiggyCliExecutor } from "../agent/cliExecutor.js";
 import { FoodAgent } from "../agent/foodAgent.js";
-import { renderFoodCartSummary } from "../agent/cartSummary.js";
+import { renderFoodCartSummary, renderPaymentSummary } from "../agent/cartSummary.js";
+import { renderTrackingSummary } from "../agent/trackingSummary.js";
 import { deepFindArray, firstString } from "../agent/jsonHeuristics.js";
 import { b, code, h, lines } from "./format.js";
 
@@ -99,6 +100,14 @@ export class SwiggyTelegramBot {
       }
       if (text === "/cart") {
         await this.client.sendMessage(chatId, h(await this.renderCart(user)), undefined, "HTML");
+        return;
+      }
+      if (text === "/payment") {
+        await this.client.sendMessage(chatId, h(await this.renderPayment(user)), undefined, "HTML");
+        return;
+      }
+      if (text.startsWith("/track")) {
+        await this.client.sendMessage(chatId, h(await this.trackOrder(user, text)), undefined, "HTML");
         return;
       }
       if (text === "/cancel") {
@@ -323,8 +332,29 @@ export class SwiggyTelegramBot {
   private async renderCart(user: TelegramUserProfile): Promise<string> {
     if (!user.addressId) return lines([b("Address needed"), `Set one with ${code("/location <addressId>")} first.`]);
     const res = await this.executor(user).foodCart(user.addressId);
+    if (!res.ok && res.error.code === "NETWORK" && /429/.test(res.error.message)) {
+      return "Swiggy is rate-limiting cart checks right now. Wait 30-60 seconds, then try /cart again.";
+    }
     if (!res.ok) return `Could not fetch cart: ${res.error.code} ${res.error.message}`;
     return renderFoodCartSummary(res.data);
+  }
+
+  private async renderPayment(user: TelegramUserProfile): Promise<string> {
+    if (!user.addressId) return lines([b("Address needed"), `Set one with ${code("/location <addressId>")} first.`]);
+    const res = await this.executor(user).foodCart(user.addressId);
+    if (!res.ok && res.error.code === "NETWORK" && /429/.test(res.error.message)) {
+      return "Swiggy is rate-limiting payment/cart checks right now. Wait 30-60 seconds, then try /payment again.";
+    }
+    if (!res.ok) return `Could not fetch payment methods: ${res.error.code} ${res.error.message}`;
+    return renderPaymentSummary(res.data);
+  }
+
+  private async trackOrder(user: TelegramUserProfile, text: string): Promise<string> {
+    const orderId = text.replace(/^\/track\s*/i, "").trim();
+    if (!orderId) return `Use ${code("/track <orderId>")} after an order is placed.`;
+    const res = await this.executor(user).foodTrackOrder(orderId);
+    if (!res.ok) return `Could not track order: ${res.error.code} ${res.error.message}`;
+    return renderTrackingSummary(res.data);
   }
 }
 
@@ -450,6 +480,8 @@ function helpText(user: TelegramUserProfile): string {
     `${code("biryani")} - browse food matches`,
     `${code("4 roti and paneer sabzi")} - build a same-restaurant meal`,
     `${code("/cart")} - inspect cart`,
+    `${code("/payment")} - show payment methods returned by Swiggy`,
+    `${code("/track <orderId>")} - track order and driver location if returned`,
     `${code("/cancel")} - clear pending action`,
     "",
     `${b("Profile")}: ${code(user.swiggyHome)}`,

@@ -120,21 +120,19 @@ export class FoodAgent {
         : `\nCoupon ${couponCode} could not be applied automatically; check it before checkout.`;
     }
 
-    const cart = await this.executor.foodCart(plan.addressId);
-    const cartText = cart.ok
-      ? renderFoodCartSummary(cart.data, {
-          itemName: added.join(", "),
-          restaurantName: primary.restaurantName,
-          estimatedTotal: sumPlanEstimate(items),
-        })
-      : `Could not fetch cart: ${cart.error.code} ${cart.error.message}`;
+    const cartText = renderFoodCartSummary(undefined, {
+      itemName: added.join(", "),
+      restaurantName: primary.restaurantName,
+      estimatedTotal: sumPlanEstimate(items),
+    });
     return (
       `Added to cart:\n${added.join("\n")}` +
       (primary.restaurantName ? `\nfrom ${primary.restaurantName}` : "") +
       couponLine +
       "\n\nReview the cart before checkout:\n" +
       cartText +
-      "\n\nCheckout is not automatic. Place the order only after verifying the final total in Swiggy/CLI."
+      "\n\nI skipped an immediate cart refresh to avoid Swiggy MCP rate limits. Use /cart after a short pause for the live total." +
+      "\n\nCheckout/payment is not automatic. Place the order only after verifying the final total in Swiggy/CLI."
     );
   }
 
