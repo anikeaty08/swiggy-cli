@@ -1,5 +1,6 @@
 import type { FoodRecommendation, PendingFoodPlan, TelegramUserProfile } from "../bot/types.js";
 import { SwiggyCliExecutor } from "./cliExecutor.js";
+import { renderFoodCartSummary } from "./cartSummary.js";
 import { deepFindArray, firstNumber, firstString, formatMoney } from "./jsonHeuristics.js";
 
 export interface FoodAgentResult {
@@ -94,7 +95,7 @@ export class FoodAgent {
     }
 
     const cart = await this.executor.foodCart(plan.addressId);
-    const cartText = cart.ok ? JSON.stringify(cart.data, null, 2).slice(0, 2500) : `${cart.error.code} ${cart.error.message}`;
+    const cartText = cart.ok ? renderFoodCartSummary(cart.data) : `Could not fetch cart: ${cart.error.code} ${cart.error.message}`;
     return (
       `Added to cart: ${r.itemName ?? r.itemId} from ${r.restaurantName ?? r.restaurantId}` +
       couponLine +

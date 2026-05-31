@@ -3,6 +3,7 @@ import { TelegramBotStore } from "./store.js";
 import { TelegramClient } from "./telegram.js";
 import { SwiggyCliExecutor } from "../agent/cliExecutor.js";
 import { FoodAgent } from "../agent/foodAgent.js";
+import { renderFoodCartSummary } from "../agent/cartSummary.js";
 import { deepFindArray, firstString } from "../agent/jsonHeuristics.js";
 
 export interface TelegramBotOptions {
@@ -166,7 +167,7 @@ export class SwiggyTelegramBot {
     if (!user.addressId) return "Set `/location <addressId>` first.";
     const res = await this.executor(user).foodCart(user.addressId);
     if (!res.ok) return `Could not fetch cart: ${res.error.code} ${res.error.message}`;
-    return `Current cart:\n${JSON.stringify(res.data, null, 2).slice(0, 3500)}`;
+    return renderFoodCartSummary(res.data);
   }
 }
 
