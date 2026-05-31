@@ -18,6 +18,7 @@ export class SwiggyTelegramBot {
   private readonly client: TelegramClient;
   private readonly store: TelegramBotStore;
   private readonly swiggyCommand?: string;
+  private readonly activeActions = new Set<string>();
 
   constructor(opts: TelegramBotOptions) {
     this.client = new TelegramClient(opts.token);
@@ -172,6 +173,13 @@ export class SwiggyTelegramBot {
 
       if (data.startsWith("food:add:")) {
         const index = Number(data.slice("food:add:".length));
+        const actionKey = `${callback.from.id}:${data}`;
+        if (this.activeActions.has(actionKey)) {
+          await this.client.answerCallbackQuery(callback.id, "Already adding this. Wait a moment.");
+          return;
+        }
+        this.activeActions.add(actionKey);
+        setTimeout(() => this.activeActions.delete(actionKey), 20_000).unref?.();
         if (user.lastSearch.mealOptions?.[index]) {
           const meal = user.lastSearch.mealOptions[index]!;
           const agent = new FoodAgent(this.executor(user));
@@ -182,6 +190,7 @@ export class SwiggyTelegramBot {
             createdAt: new Date().toISOString(),
             recommendation: meal.items[0]!.recommendation,
             items: meal.items,
+            discount: meal.discount,
           };
           await this.store.updateUser(callback.from.id, { lastPlan: plan });
           await this.client.answerCallbackQuery(callback.id, "Adding meal to cart...");
@@ -371,7 +380,15 @@ function renderMealPriceDetails(index: number, meal: NonNullable<FoodSearchSessi
     out.push(`${item.quantity} x ${h(item.recommendation.itemName ?? item.recommendation.title)} = Rs ${unit * item.quantity}`);
   }
   out.push("", `${b("Estimated item total")}: Rs ${Math.round(meal.estimatedTotal)}`);
-  out.push("Taxes, delivery, platform fee, packaging, and payment offers depend on the final Swiggy cart response.");
+  if (meal.discount?.foodCouponCode) {
+    out.push(`${b("Food coupon")}: ${h(meal.discount.foodCouponCode)} saves about Rs ${Math.round(meal.discount.foodCouponSavings ?? 0)}`);
+  } else if (meal.discount?.foodCouponMinimum && meal.estimatedTotal < meal.discount.foodCouponMinimum) {
+    out.push(`${b("Food coupon")}: add about Rs ${Math.round(meal.discount.foodCouponMinimum - meal.estimatedTotal)} more to test the next coupon threshold.`);
+  } else {
+    out.push(`${b("Food coupon")}: no applicable coupon returned by MCP for this estimate.`);
+  }
+  out.push(`${b("Payment offers")}: ${h(meal.discount?.paymentOfferNote ?? "Not returned by MCP yet.")}`);
+  out.push("Taxes, delivery, platform fee, and packaging depend on the final Swiggy cart response.");
   return out.join("\n");
 }
 

@@ -54,6 +54,7 @@ export interface PendingFoodPlan {
   createdAt: string;
   recommendation: FoodRecommendation;
   items?: FoodPlanItem[];
+  discount?: FoodDiscountSummary;
 }
 
 export interface FoodPlanItem {
@@ -94,4 +95,12 @@ export interface FoodMealOption {
   restaurantId?: string;
   items: FoodPlanItem[];
   estimatedTotal: number;
+  discount?: FoodDiscountSummary;
+}
+
+export interface FoodDiscountSummary {
+  foodCouponCode?: string;
+  foodCouponSavings?: number;
+  foodCouponMinimum?: number;
+  paymentOfferNote?: string;
 }

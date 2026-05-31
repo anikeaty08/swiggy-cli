@@ -1,4 +1,13 @@
-import type { FoodMealOption, FoodPlanItem, FoodRecommendation, FoodSearchMode, FoodSearchSession, PendingFoodPlan, TelegramUserProfile } from "../bot/types.js";
+import type {
+  FoodDiscountSummary,
+  FoodMealOption,
+  FoodPlanItem,
+  FoodRecommendation,
+  FoodSearchMode,
+  FoodSearchSession,
+  PendingFoodPlan,
+  TelegramUserProfile,
+} from "../bot/types.js";
 import { SwiggyCliExecutor } from "./cliExecutor.js";
 import { renderFoodCartSummary } from "./cartSummary.js";
 import { deepFindArray, firstNumber, firstString, formatMoney } from "./jsonHeuristics.js";
@@ -103,11 +112,12 @@ export class FoodAgent {
 
     const primary = items[0]!.recommendation;
     let couponLine = "";
-    if (primary.couponCode) {
-      const coupon = await this.executor.foodApplyCoupon(primary.couponCode).catch(() => undefined);
+    const couponCode = plan.discount?.foodCouponCode ?? primary.couponCode;
+    if (couponCode) {
+      const coupon = await this.executor.foodApplyCoupon(couponCode).catch(() => undefined);
       couponLine = coupon?.ok
-        ? `\nCoupon applied: ${primary.couponCode}`
-        : `\nCoupon ${primary.couponCode} could not be applied automatically; check it before checkout.`;
+        ? `\nCoupon applied: ${couponCode}`
+        : `\nCoupon ${couponCode} could not be applied automatically; check it before checkout.`;
     }
 
     const cart = await this.executor.foodCart(plan.addressId);
@@ -170,6 +180,11 @@ export class FoodAgent {
       });
     }
     matches.sort((a, b) => (mode === "cheapest" ? a.estimatedTotal - b.estimatedTotal : a.score - b.score));
+    const coupons = await this.executor.foodCoupons().catch(() => undefined);
+    const couponList = coupons?.ok ? extractCoupons(coupons.data) : [];
+    for (const match of matches) {
+      match.discount = discountSummaryForTotal(match.estimatedTotal, couponList);
+    }
     const best = matches[0];
     if (!best) return undefined;
     const primary = best.items[0]!.recommendation;
@@ -180,6 +195,7 @@ export class FoodAgent {
       createdAt: new Date().toISOString(),
       recommendation: primary,
       items: best.items,
+      discount: best.discount,
     };
     return {
       plan,
@@ -436,8 +452,12 @@ function looksLikeMenuItem(record: Record<string, unknown>): boolean {
 }
 
 function extractBestCoupon(payload: unknown): CouponCandidate | undefined {
+  return extractCoupons(payload).sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))[0];
+}
+
+function extractCoupons(payload: unknown): CouponCandidate[] {
   const list = deepFindArray(payload, ["coupons", "offers", "data"]) ?? [];
-  const coupons = list
+  return list
     .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
     .map((record) => {
       const flat = flattenOne(record);
@@ -448,7 +468,21 @@ function extractBestCoupon(payload: unknown): CouponCandidate | undefined {
       };
     })
     .filter((coupon) => coupon.code || coupon.discount);
-  return coupons.sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))[0];
+}
+
+function discountSummaryForTotal(total: number, coupons: CouponCandidate[]): FoodDiscountSummary {
+  const applicable = coupons
+    .filter((coupon) => coupon.discount !== undefined && (coupon.minimumOrderValue === undefined || total >= coupon.minimumOrderValue))
+    .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))[0];
+  const closest = coupons
+    .filter((coupon) => coupon.minimumOrderValue !== undefined && total < coupon.minimumOrderValue!)
+    .sort((a, b) => a.minimumOrderValue! - b.minimumOrderValue!)[0];
+  return {
+    foodCouponCode: applicable?.code,
+    foodCouponSavings: applicable?.discount,
+    foodCouponMinimum: applicable?.minimumOrderValue ?? closest?.minimumOrderValue,
+    paymentOfferNote: "Payment/card offers were not exposed by the current Food MCP cart response; it only returned Cash on Delivery.",
+  };
 }
 
 function scoreCandidate(candidate: MenuCandidate, coupon?: CouponCandidate): MenuCandidate & {
