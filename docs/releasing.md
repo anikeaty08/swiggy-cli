@@ -23,7 +23,7 @@ Releases are tag-driven. Pushing a tag matching `v*.*.*` triggers `.github/workf
 
 A maintainer with publish rights needs:
 
-- `NPM_TOKEN` set as a GitHub Actions secret on this repo. Use a granular access token scoped to `swiggy-cli` only â€” not a classic, not a legacy token.
+- `NPM_TOKEN` set as a GitHub Actions secret on this repo. Use a granular access token scoped to `swiggy-mcp-agent` only - not a classic, not a legacy token.
 - npm 2FA configured for "Auth and Writes" (recommended). With provenance + 2FA, the release pipeline still works because the GitHub OIDC token authorises publish; the human 2FA prompt is bypassed for CI.
 
 ## Cutting a release
@@ -42,8 +42,8 @@ git push --follow-tags   # pushes commit AND the tag â†’ triggers release.y
 After CI completes:
 
 ```bash
-npm view swiggy-cli                   # confirm the new version
-npx -p swiggy-cli@<version> swiggy --version
+npm view swiggy-mcp-agent             # confirm the new version
+npx -p swiggy-mcp-agent@<version> swiggy --version
 ```
 
 ## What gets published
@@ -68,14 +68,14 @@ npm version 0.2.0-rc.1 --no-git-tag-version
 npm publish --tag next --access public --provenance
 ```
 
-Users opt in with `npm i -g swiggy-cli@next`. Promote later with `npm dist-tag add swiggy-cli@0.2.0-rc.1 latest`.
+Users opt in with `npm i -g swiggy-mcp-agent@next`. Promote later with `npm dist-tag add swiggy-mcp-agent@0.2.0-rc.1 latest`.
 
 ## Yanking
 
 If a release is broken:
 
 ```bash
-npm deprecate swiggy-cli@<bad-version> "<reason â€” point at the fix>"
+npm deprecate swiggy-mcp-agent@<bad-version> "<reason - point at the fix>"
 ```
 
 Do not unpublish unless within the 72-hour window and the version was never installed by anyone â€” unpublishing breaks lockfiles for everyone who already has it.

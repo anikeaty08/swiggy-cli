@@ -4,7 +4,7 @@
 
 Terminal-grade access to Swiggy's MCP platform.
 
-`swiggy-cli` turns Swiggy Food, Instamart, and Dineout into a clean command-line interface for humans, scripts, and coding agents. It wraps the live MCP servers with a sharper command surface, stable machine output, OAuth handling, profiles, and safer defaults for real commerce workflows.
+`swiggy-mcp-agent` turns Swiggy Food, Instamart, and Dineout into a clean command-line interface and Telegram agent for humans, scripts, and coding agents. It wraps the live MCP servers with a sharper command surface, stable machine output, OAuth handling, profiles, and safer defaults for real commerce workflows.
 
 If you want to inspect live tool schemas, script against Swiggy from CI, or give an agent a deterministic CLI instead of a browser-shaped workflow, this repo is built for that.
 
@@ -63,14 +63,14 @@ Requirements:
 Global install:
 
 ```bash
-npm i -g swiggy-cli
+npm i -g swiggy-mcp-agent
 swiggy --help
 ```
 
 One-off use:
 
 ```bash
-npx -p swiggy-cli swiggy --help
+npx -p swiggy-mcp-agent swiggy --help
 ```
 
 Local development:
@@ -329,7 +329,7 @@ swiggy doctor
 `npx` confusion:
 
 ```bash
-npx -p swiggy-cli swiggy --help
+npx -p swiggy-mcp-agent swiggy --help
 ```
 
 ## Docs

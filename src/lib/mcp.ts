@@ -121,7 +121,7 @@ export class McpClient {
       {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        clientInfo: { name: "swiggy-cli", version: VERSION },
+        clientInfo: { name: "swiggy-mcp-agent", version: VERSION },
       },
       false
     );

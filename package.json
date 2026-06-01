@@ -1,7 +1,7 @@
 {
-  "name": "swiggy-cli",
-  "version": "0.1.4",
-  "description": "Human- and agent-friendly CLI for the official Swiggy MCP servers (food, instamart, dineout).",
+  "name": "swiggy-mcp-agent",
+  "version": "0.1.5",
+  "description": "Swiggy MCP CLI and Telegram commerce agent for Food, Instamart, and Dineout automation.",
   "type": "module",
   "license": "MIT",
   "author": "anikeaty08/swiggy-cli maintainers",
@@ -29,8 +29,8 @@
     "model-context-protocol"
   ],
   "bin": {
-    "swiggy": "./dist/cli.js",
-    "smn": "./dist/cli.js"
+    "swiggy": "dist/cli.js",
+    "smn": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -72,7 +72,6 @@
   },
   "publishConfig": {
     "access": "public",
-    "provenance": true,
     "registry": "https://registry.npmjs.org/"
   }
 }

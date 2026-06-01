@@ -57,15 +57,15 @@ swiggy food checkout --no-interactive --yes
 
 ## `npx swiggy` doesn't find the binary
 
-The npm package is `swiggy-cli`, but the binary it installs is `swiggy`. With `npx` you have to specify both:
+The npm package is `swiggy-mcp-agent`, but the binary it installs is `swiggy`. With `npx` you have to specify both:
 
 ```bash
-npx -p swiggy-cli swiggy --help
+npx -p swiggy-mcp-agent swiggy --help
 # or pin a version:
-npx --package swiggy-cli@latest swiggy --help
+npx --package swiggy-mcp-agent@latest swiggy --help
 ```
 
-After `npm i -g swiggy-cli` (no `-p` needed), you can just type `swiggy` directly.
+After `npm i -g swiggy-mcp-agent` (no `-p` needed), you can just type `swiggy` directly.
 
 ## Streaming responses look truncated
 

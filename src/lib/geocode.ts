@@ -11,7 +11,7 @@ export async function geocodeAddress(address: string): Promise<Coordinates> {
   if (!query) throw new UsageError("Missing address text.", "Pass --address \"full address\"");
 
   const endpoint = process.env.SWIGGY_GEOCODER_URL ?? "https://nominatim.openstreetmap.org/search";
-  const userAgent = process.env.SWIGGY_GEOCODER_USER_AGENT ?? `swiggy-cli/${VERSION}`;
+  const userAgent = process.env.SWIGGY_GEOCODER_USER_AGENT ?? `swiggy-mcp-agent/${VERSION}`;
   const url = new URL(endpoint);
   url.searchParams.set("q", query);
   url.searchParams.set("format", "json");

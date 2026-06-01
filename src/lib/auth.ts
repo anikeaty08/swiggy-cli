@@ -411,7 +411,7 @@ async function refreshAccessToken(entry: AuthState["servers"][string]): Promise<
 
 async function registerDynamicClient(registrationEndpoint: string, redirectUri: string): Promise<OAuthClient> {
   const body = {
-    client_name: "swiggy-cli",
+    client_name: "swiggy-mcp-agent",
     redirect_uris: [redirectUri],
     grant_types: ["authorization_code"],
     response_types: ["code"],
