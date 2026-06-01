@@ -10,6 +10,7 @@ import { buildConfigCommands } from "./commands/config.js";
 import { buildProfileCommands } from "./commands/profile.js";
 import { buildDoctorCommand } from "./commands/doctor.js";
 import { buildBotCommands } from "./commands/bot.js";
+import { buildSmokeCommand } from "./commands/smoke.js";
 import { attachOutputOptions, readGlobalOpts, resolveExecOpts } from "./commands/common.js";
 import { renderError, renderStartupBanner } from "./lib/output.js";
 import { CliError, UsageError } from "./lib/errors.js";
@@ -48,6 +49,7 @@ program
       `  $ swiggy call food search_restaurants --input '{"query":"pizza"}'\n` +
       `  $ swiggy auth init --server food\n` +
       `  $ swiggy bot telegram --token "$TELEGRAM_BOT_TOKEN"\n` +
+      `  $ swiggy smoke\n` +
       `  $ swiggy doctor\n\n` +
       `Docs: see README.md and ./docs/`
   );
@@ -61,6 +63,7 @@ buildConfigCommands(program);
 buildProfileCommands(program);
 buildDoctorCommand(program);
 buildBotCommands(program);
+buildSmokeCommand(program);
 
 program
   .command("completion")

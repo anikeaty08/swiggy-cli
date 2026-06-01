@@ -53,6 +53,8 @@ Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`,
 | `swiggy instamart order <id>`          | `get_order_details` |
 | `swiggy instamart track <id>`          | `track_order`       |
 
+`instamart track` accepts either `--lat/--lng` or `--address "full address"` for coordinate resolution.
+
 
 ## Dineout (Layer A)
 
@@ -67,6 +69,7 @@ Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`,
 | `swiggy dineout book`               | `book_table` âš                |
 | `swiggy dineout status <bookingId>` | `get_booking_status`         |
 
+`dineout search`, `dineout details`, and `dineout slots` accept `--address "full address"` in addition to saved Dineout locations or `--lat/--lng`.
 
 ## Management
 
@@ -85,6 +88,7 @@ Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`,
 | `swiggy profile delete <name>`            | remove profile (cannot delete `default`)  |
 | `swiggy profile set <name> <key> <value>` | tweak a profile field                     |
 | `swiggy doctor`                           | full self-check â€” exits non-zero on issue |
+| `swiggy smoke`                            | non-mutating auth/render/cart smoke check  |
 | `swiggy completion [shell]`               | print shell completion setup              |
 
 

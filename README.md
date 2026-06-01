@@ -29,7 +29,7 @@ The result is a CLI that feels practical in a shell and dependable inside an age
 - Search Dineout restaurants, inspect details, fetch reservation slots, and check booking status
 - Discover live tools and schemas directly from Swiggy MCP
 - Return a stable machine envelope with `--json`
-- Run a Telegram food-ordering agent on top of isolated per-user CLI profiles
+- Run a Telegram Food, Instamart, and Dineout agent on top of isolated per-user CLI profiles
 
 ## Command Model
 
@@ -40,7 +40,7 @@ Layer A is human-friendly:
 ```bash
 swiggy food search-restaurants --query "biryani" --address-id <addressId>
 swiggy instamart search --query "milk bread eggs" --address-id <addressId>
-swiggy dineout search --query "italian" --lat 12.9716 --lng 77.5946
+swiggy dineout search --query "italian" --address "Indiranagar, Bengaluru"
 ```
 
 Layer B is generic and automation-first:
@@ -133,16 +133,16 @@ swiggy instamart search --query "milk bread eggs" --address-id <addressId>
 swiggy instamart add-to-cart --address-id <addressId> --spin-id <spinId> --quantity 2
 swiggy instamart cart
 swiggy instamart checkout --address-id <addressId> --yes
-swiggy instamart track <orderId> --lat <lat> --lng <lng>
+swiggy instamart track <orderId> --address "Indiranagar, Bengaluru"
 ```
 
 Dineout:
 
 ```bash
 swiggy dineout locations
-swiggy dineout search --query "italian" --lat 12.9716 --lng 77.5946
-swiggy dineout details <restaurantId> --lat 12.9716 --lng 77.5946
-swiggy dineout slots --restaurant-id <restaurantId> --date 2026-06-01 --lat 12.9716 --lng 77.5946
+swiggy dineout search --query "italian" --address "Indiranagar, Bengaluru"
+swiggy dineout details <restaurantId> --address "Indiranagar, Bengaluru"
+swiggy dineout slots --restaurant-id <restaurantId> --date 2026-06-01 --address "Indiranagar, Bengaluru"
 swiggy dineout status <orderId>
 ```
 
@@ -337,6 +337,7 @@ Additional docs live in [`docs/`](./docs):
 - `docs/architecture.md`
 - `docs/auth.md`
 - `docs/commands.md`
+- `docs/deployment.md`
 - `docs/output-contract.md`
 - `docs/telegram-bot.md`
 - `docs/troubleshooting.md`

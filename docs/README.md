@@ -19,8 +19,9 @@ Each page is self-contained, named after a single concept, and short enough to f
 6. [MCP protocol notes](./mcp-protocol-notes.md) â€” transport, headers, manual replay.
 7. [Skills](./skills.md) â€” agent-skills shipped from this repo and how to install them.
 8. [Extending](./extending.md) â€” adding new commands or supporting new servers.
-9. [Releasing](./releasing.md) â€” tag-based publish flow.
-10. [Troubleshooting](./troubleshooting.md) â€” common failures and fixes.
+9. [Deployment](./deployment.md) â€” Telegram bot hosting, env vars, smoke checks.
+10. [Releasing](./releasing.md) â€” tag-based publish flow.
+11. [Troubleshooting](./troubleshooting.md) â€” common failures and fixes.
 
 ## External references
 

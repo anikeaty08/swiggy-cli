@@ -32,6 +32,10 @@ export class SwiggyCliExecutor {
     return this.run(["food", "addresses"]);
   }
 
+  async instamartAddresses(): Promise<CliEnvelope> {
+    return this.run(["instamart", "addresses"]);
+  }
+
   async foodCart(addressId: string): Promise<CliEnvelope> {
     return this.run(["food", "cart", "--address-id", addressId]);
   }
@@ -69,6 +73,57 @@ export class SwiggyCliExecutor {
 
   async foodTrackOrder(orderId: string): Promise<CliEnvelope> {
     return this.run(["food", "track", orderId]);
+  }
+
+  async instamartSearch(query: string, addressId: string): Promise<CliEnvelope> {
+    return this.run(["instamart", "search", "--query", query, "--address-id", addressId]);
+  }
+
+  async instamartAddToCart(input: { addressId: string; spinId: string; quantity?: number }): Promise<CliEnvelope> {
+    return this.run([
+      "instamart",
+      "add-to-cart",
+      "--address-id",
+      input.addressId,
+      "--spin-id",
+      input.spinId,
+      "--quantity",
+      String(input.quantity ?? 1),
+    ]);
+  }
+
+  async instamartCart(): Promise<CliEnvelope> {
+    return this.run(["instamart", "cart"]);
+  }
+
+  async dineoutSearch(input: {
+    query: string;
+    addressId?: string;
+    latitude?: number;
+    longitude?: number;
+  }): Promise<CliEnvelope> {
+    const args = ["dineout", "search", "--query", input.query];
+    if (input.addressId) args.push("--address-id", input.addressId);
+    if (input.latitude !== undefined && input.longitude !== undefined) {
+      args.push("--lat", String(input.latitude), "--lng", String(input.longitude));
+    }
+    return this.run(args);
+  }
+
+  async dineoutDetails(input: { restaurantId: string; latitude?: number; longitude?: number }): Promise<CliEnvelope> {
+    const args = ["dineout", "details", input.restaurantId];
+    if (input.latitude !== undefined && input.longitude !== undefined) {
+      args.push("--lat", String(input.latitude), "--lng", String(input.longitude));
+    }
+    return this.run(args);
+  }
+
+  async dineoutSlots(input: { restaurantId: string; date: string; latitude?: number; longitude?: number }): Promise<CliEnvelope> {
+    const args = ["dineout", "slots", "--restaurant-id", input.restaurantId, "--date", input.date];
+    if (input.latitude !== undefined && input.longitude !== undefined) {
+      args.push("--lat", String(input.latitude), "--lng", String(input.longitude));
+    }
+    return this.run(args);
   }
 
   async call(server: ServerName, tool: string, input: unknown): Promise<CliEnvelope> {

@@ -51,11 +51,12 @@ export class FoodAgent {
     }
 
     const coupons = await this.executor.foodCoupons().catch(() => undefined);
-    const bestCoupon = coupons?.ok ? extractBestCoupon(coupons.data) : undefined;
+    const couponList = coupons?.ok ? extractCoupons(coupons.data) : [];
+    const bestCoupon = bestCouponForTotal(undefined, couponList);
     const ranked = candidates
       .map((candidate) => scoreCandidate(candidate, bestCoupon))
       .sort((a, b) => compareCandidates(a, b, mode));
-    const options = ranked.map((candidate) => toRecommendation(query, candidate, bestCoupon));
+    const options = ranked.map((candidate) => toRecommendation(query, candidate, bestCouponForTotal(candidate.price, couponList)));
     const recommendation = options[0]!;
 
     const plan: PendingFoodPlan = {
@@ -492,13 +493,33 @@ function discountSummaryForTotal(total: number, coupons: CouponCandidate[]): Foo
     .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))[0];
   const closest = coupons
     .filter((coupon) => coupon.minimumOrderValue !== undefined && total < coupon.minimumOrderValue!)
-    .sort((a, b) => a.minimumOrderValue! - b.minimumOrderValue!)[0];
+    .sort((a, b) => {
+      const aNeed = a.minimumOrderValue! - total;
+      const bNeed = b.minimumOrderValue! - total;
+      const aNet = (a.discount ?? 0) - aNeed;
+      const bNet = (b.discount ?? 0) - bNeed;
+      return bNet - aNet || aNeed - bNeed;
+    })[0];
+  const addOnNeeded = closest?.minimumOrderValue !== undefined ? Math.max(0, closest.minimumOrderValue - total) : undefined;
   return {
     foodCouponCode: applicable?.code,
     foodCouponSavings: applicable?.discount,
     foodCouponMinimum: applicable?.minimumOrderValue ?? closest?.minimumOrderValue,
+    addOnNeeded,
+    addOnWorthIt: addOnNeeded !== undefined && closest?.discount !== undefined ? closest.discount > addOnNeeded : undefined,
     paymentOfferNote: "Payment/card offers were not exposed by the current Food MCP cart response; it only returned Cash on Delivery.",
   };
+}
+
+function bestCouponForTotal(total: number | undefined, coupons: CouponCandidate[]): CouponCandidate | undefined {
+  if (total === undefined) return extractBestCoupon({ coupons });
+  return coupons
+    .map((coupon) => {
+      const addOnNeeded = coupon.minimumOrderValue !== undefined && total < coupon.minimumOrderValue ? coupon.minimumOrderValue - total : 0;
+      const net = (coupon.discount ?? 0) - addOnNeeded;
+      return { coupon, net, addOnNeeded };
+    })
+    .sort((a, b) => b.net - a.net || a.addOnNeeded - b.addOnNeeded)[0]?.coupon;
 }
 
 function scoreCandidate(candidate: MenuCandidate, coupon?: CouponCandidate): MenuCandidate & {

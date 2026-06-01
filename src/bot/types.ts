@@ -45,6 +45,9 @@ export interface TelegramUserProfile {
   city?: string;
   lastPlan?: PendingFoodPlan;
   lastSearch?: FoodSearchSession;
+  lastInstamartPlan?: PendingInstamartPlan;
+  lastInstamartSearch?: InstamartSearchSession;
+  lastDineoutSearch?: DineoutSearchSession;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,5 +107,56 @@ export interface FoodDiscountSummary {
   foodCouponCode?: string;
   foodCouponSavings?: number;
   foodCouponMinimum?: number;
+  addOnNeeded?: number;
+  addOnWorthIt?: boolean;
   paymentOfferNote?: string;
+}
+
+export interface PendingInstamartPlan {
+  kind: "instamart_cart";
+  query: string;
+  addressId: string;
+  createdAt: string;
+  product: InstamartProduct;
+  quantity: number;
+}
+
+export interface InstamartProduct {
+  title: string;
+  spinId?: string;
+  brand?: string;
+  price?: number;
+  mrp?: number;
+  quantityText?: string;
+  raw: unknown;
+}
+
+export interface InstamartSearchSession {
+  kind: "instamart_search";
+  query: string;
+  addressId: string;
+  page: number;
+  options: InstamartProduct[];
+  createdAt: string;
+}
+
+export interface DineoutRestaurant {
+  title: string;
+  restaurantId?: string;
+  area?: string;
+  rating?: string;
+  costForTwo?: string;
+  offer?: string;
+  raw: unknown;
+}
+
+export interface DineoutSearchSession {
+  kind: "dineout_search";
+  query: string;
+  page: number;
+  latitude?: number;
+  longitude?: number;
+  addressId?: string;
+  options: DineoutRestaurant[];
+  createdAt: string;
 }

@@ -1,8 +1,18 @@
-import type { FoodRecommendation, FoodSearchMode, FoodSearchSession, TelegramCallbackQuery, TelegramMessage, TelegramUserProfile } from "./types.js";
+import type {
+  DineoutSearchSession,
+  FoodRecommendation,
+  FoodSearchMode,
+  FoodSearchSession,
+  InstamartSearchSession,
+  TelegramCallbackQuery,
+  TelegramMessage,
+  TelegramUserProfile,
+} from "./types.js";
 import { TelegramBotStore } from "./store.js";
 import { TelegramClient } from "./telegram.js";
 import { SwiggyCliExecutor } from "../agent/cliExecutor.js";
 import { FoodAgent } from "../agent/foodAgent.js";
+import { DineoutAgent, InstamartAgent } from "../agent/commerceAgents.js";
 import { renderFoodCartSummary, renderPaymentSummary } from "../agent/cartSummary.js";
 import { renderTrackingSummary } from "../agent/trackingSummary.js";
 import { deepFindArray, firstString } from "../agent/jsonHeuristics.js";
@@ -90,7 +100,12 @@ export class SwiggyTelegramBot {
         return;
       }
       if (text === "/addresses") {
-        await this.client.sendMessage(chatId, await this.renderAddresses(user), undefined, "HTML");
+        const rendered = await this.renderAddresses(user);
+        await this.client.sendMessage(chatId, rendered.text, rendered.keyboard, "HTML");
+        return;
+      }
+      if (text === "/imcart") {
+        await this.client.sendMessage(chatId, h(await this.renderInstamartCart(user)), undefined, "HTML");
         return;
       }
       if (text.startsWith("/location")) {
@@ -135,6 +150,37 @@ export class SwiggyTelegramBot {
       }
 
       const foodRequest = parseFoodQuery(text);
+      const instamartRequest = parseInstamartQuery(text);
+      if (instamartRequest) {
+        const agent = new InstamartAgent(this.executor(user));
+        const result = await agent.search(instamartRequest, user);
+        if (result.search || result.plan) {
+          await this.store.updateUser(telegramUserId, {
+            lastInstamartSearch: result.search,
+            lastInstamartPlan: result.plan,
+          });
+        }
+        await this.client.sendMessage(
+          chatId,
+          result.search ? renderInstamartPage(result.search) : h(result.reply),
+          result.search ? instamartKeyboard(result.search) : undefined,
+          "HTML"
+        );
+        return;
+      }
+      const dineoutRequest = parseDineoutQuery(text);
+      if (dineoutRequest) {
+        const agent = new DineoutAgent(this.executor(user));
+        const result = await agent.search(dineoutRequest, user);
+        if (result.search) await this.store.updateUser(telegramUserId, { lastDineoutSearch: result.search });
+        await this.client.sendMessage(
+          chatId,
+          result.search ? renderDineoutPage(result.search) : h(result.reply),
+          result.search ? dineoutKeyboard(result.search) : undefined,
+          "HTML"
+        );
+        return;
+      }
       if (foodRequest) {
         const agent = new FoodAgent(this.executor(user));
         const result = await agent.recommend(foodRequest.query, user, foodRequest.mode);
@@ -169,6 +215,74 @@ export class SwiggyTelegramBot {
 
     try {
       const user = await this.store.getUser(callback.from.id);
+      if (data === "auth:status") {
+        await this.client.answerCallbackQuery(callback.id);
+        await this.client.sendMessage(chatId, await this.renderStatus(user), undefined, "HTML");
+        return;
+      }
+      if (data.startsWith("addr:set:")) {
+        const addressId = data.slice("addr:set:".length);
+        await this.store.updateUser(callback.from.id, { addressId, lastPlan: undefined, lastInstamartPlan: undefined });
+        await this.client.answerCallbackQuery(callback.id, "Address selected");
+        await this.client.sendMessage(chatId, lines([b("Delivery address selected"), `${b("Address id")}: ${code(addressId)}`]), undefined, "HTML");
+        return;
+      }
+      if (data.startsWith("im:page:")) {
+        if (!user.lastInstamartSearch) {
+          await this.client.answerCallbackQuery(callback.id, "Instamart search expired.");
+          return;
+        }
+        const page = Number(data.slice("im:page:".length));
+        const nextSearch = clampInstamartPage({ ...user.lastInstamartSearch, page });
+        await this.store.updateUser(callback.from.id, { lastInstamartSearch: nextSearch });
+        if (messageId) await this.client.editMessageText(chatId, messageId, renderInstamartPage(nextSearch), instamartKeyboard(nextSearch), "HTML");
+        await this.client.answerCallbackQuery(callback.id);
+        return;
+      }
+      if (data.startsWith("im:add:")) {
+        if (!user.lastInstamartSearch) {
+          await this.client.answerCallbackQuery(callback.id, "Instamart search expired.");
+          return;
+        }
+        const index = Number(data.slice("im:add:".length));
+        const product = user.lastInstamartSearch.options[index];
+        if (!product) {
+          await this.client.answerCallbackQuery(callback.id, "That product is no longer available.");
+          return;
+        }
+        const agent = new InstamartAgent(this.executor(user));
+        const plan = agent.createPlan(user.lastInstamartSearch.query, user.lastInstamartSearch.addressId, product);
+        await this.store.updateUser(callback.from.id, { lastInstamartPlan: plan });
+        await this.client.answerCallbackQuery(callback.id, "Adding to Instamart cart...");
+        await this.client.sendMessage(chatId, h(await agent.confirm(plan)), undefined, "HTML");
+        return;
+      }
+      if (data.startsWith("do:page:")) {
+        if (!user.lastDineoutSearch) {
+          await this.client.answerCallbackQuery(callback.id, "Dineout search expired.");
+          return;
+        }
+        const page = Number(data.slice("do:page:".length));
+        const nextSearch = clampDineoutPage({ ...user.lastDineoutSearch, page });
+        await this.store.updateUser(callback.from.id, { lastDineoutSearch: nextSearch });
+        if (messageId) await this.client.editMessageText(chatId, messageId, renderDineoutPage(nextSearch), dineoutKeyboard(nextSearch), "HTML");
+        await this.client.answerCallbackQuery(callback.id);
+        return;
+      }
+      if (data.startsWith("do:detail:") || data.startsWith("do:slots:")) {
+        if (!user.lastDineoutSearch) {
+          await this.client.answerCallbackQuery(callback.id, "Dineout search expired.");
+          return;
+        }
+        const index = Number(data.split(":").at(-1));
+        const agent = new DineoutAgent(this.executor(user));
+        await this.client.answerCallbackQuery(callback.id);
+        const text = data.startsWith("do:detail:")
+          ? await agent.details(user.lastDineoutSearch, index)
+          : await agent.slots(user.lastDineoutSearch, index);
+        await this.client.sendMessage(chatId, h(text), undefined, "HTML");
+        return;
+      }
       if (!user.lastSearch) {
         await this.client.answerCallbackQuery(callback.id, "Search expired. Send a food name again.");
         return;
@@ -180,12 +294,6 @@ export class SwiggyTelegramBot {
         await this.store.updateUser(callback.from.id, { lastSearch: nextSearch });
         if (messageId) await this.client.editMessageText(chatId, messageId, renderSearchPage(nextSearch), searchKeyboard(nextSearch), "HTML");
         await this.client.answerCallbackQuery(callback.id);
-        return;
-      }
-
-      if (data === "auth:status") {
-        await this.client.answerCallbackQuery(callback.id);
-        await this.client.sendMessage(chatId, await this.renderStatus(user), undefined, "HTML");
         return;
       }
 
@@ -271,16 +379,17 @@ export class SwiggyTelegramBot {
     return out.join("\n");
   }
 
-  private async renderAddresses(user: TelegramUserProfile): Promise<string> {
+  private async renderAddresses(user: TelegramUserProfile): Promise<{ text: string; keyboard?: unknown }> {
     const res = await this.executor(user).addresses();
     if (!res.ok) {
       if (res.error.code === "AUTH_REQUIRED" || res.error.code === "AUTH_FAILED") {
-        return lines([b("Food auth needed"), `Send ${code("/auth food")}, complete browser login, then try ${code("/addresses")} again.`]);
+        return { text: lines([b("Food auth needed"), `Send ${code("/auth food")}, complete browser login, then try ${code("/addresses")} again.`]) };
       }
-      return lines([b("Could not list addresses"), `${h(res.error.code)}: ${h(res.error.message)}`]);
+      return { text: lines([b("Could not list addresses"), `${h(res.error.code)}: ${h(res.error.message)}`]) };
     }
     const addresses = deepFindArray(res.data, ["addresses", "locations", "data"]) ?? [];
     const out = [b("Saved Swiggy addresses")];
+    const keyboardRows: Array<Array<{ text: string; callback_data: string }>> = [];
     addresses.forEach((item, index) => {
       if (!item || typeof item !== "object") return;
       const record = item as Record<string, unknown>;
@@ -289,6 +398,7 @@ export class SwiggyTelegramBot {
       const tag = firstString(record, ["addressTag", "addressCategory", "name", "label", "title"]);
       const phone = firstString(record, ["phoneNumber", "phone"]);
       if (id) {
+        keyboardRows.push([{ text: `Use ${index + 1}`, callback_data: `addr:set:${id}` }]);
         out.push(
           "",
           b(`${index + 1}. ${tag ?? "Address"}`),
@@ -300,7 +410,7 @@ export class SwiggyTelegramBot {
     });
     if (out.length === 1) out.push("No saved addresses found.");
     out.push("", `You can also save display text with ${code("/address <full address>")}.`);
-    return out.join("\n");
+    return { text: out.join("\n"), keyboard: keyboardRows.length > 0 ? { inline_keyboard: keyboardRows.slice(0, 10) } : undefined };
   }
 
   private async setLocation(telegramUserId: number, text: string): Promise<string> {
@@ -380,6 +490,12 @@ export class SwiggyTelegramBot {
     return renderPaymentSummary(res.data);
   }
 
+  private async renderInstamartCart(user: TelegramUserProfile): Promise<string> {
+    const res = await this.executor(user).instamartCart();
+    if (!res.ok) return `Could not fetch Instamart cart: ${res.error.code} ${res.error.message}`;
+    return renderFoodCartSummary(res.data);
+  }
+
   private async trackOrder(user: TelegramUserProfile, text: string): Promise<string> {
     const orderId = text.replace(/^\/track\s*/i, "").trim();
     if (!orderId) return `Use ${code("/track <orderId>")} after an order is placed.`;
@@ -392,6 +508,16 @@ export class SwiggyTelegramBot {
 const PAGE_SIZE = 4;
 
 function clampSearchPage(search: FoodSearchSession): FoodSearchSession {
+  const maxPage = Math.max(0, Math.ceil(search.options.length / PAGE_SIZE) - 1);
+  return { ...search, page: Math.min(Math.max(0, search.page), maxPage) };
+}
+
+function clampInstamartPage(search: InstamartSearchSession): InstamartSearchSession {
+  const maxPage = Math.max(0, Math.ceil(search.options.length / PAGE_SIZE) - 1);
+  return { ...search, page: Math.min(Math.max(0, search.page), maxPage) };
+}
+
+function clampDineoutPage(search: DineoutSearchSession): DineoutSearchSession {
   const maxPage = Math.max(0, Math.ceil(search.options.length / PAGE_SIZE) - 1);
   return { ...search, page: Math.min(Math.max(0, search.page), maxPage) };
 }
@@ -443,8 +569,12 @@ function renderMealPriceDetails(index: number, meal: NonNullable<FoodSearchSessi
   out.push("", `${b("Estimated item total")}: Rs ${Math.round(meal.estimatedTotal)}`);
   if (meal.discount?.foodCouponCode) {
     out.push(`${b("Food coupon")}: ${h(meal.discount.foodCouponCode)} saves about Rs ${Math.round(meal.discount.foodCouponSavings ?? 0)}`);
-  } else if (meal.discount?.foodCouponMinimum && meal.estimatedTotal < meal.discount.foodCouponMinimum) {
-    out.push(`${b("Food coupon")}: add about Rs ${Math.round(meal.discount.foodCouponMinimum - meal.estimatedTotal)} more to test the next coupon threshold.`);
+  } else if (meal.discount?.addOnNeeded !== undefined && meal.discount.addOnNeeded > 0) {
+    out.push(
+      `${b("Food coupon")}: add about Rs ${Math.round(meal.discount.addOnNeeded)} more ${
+        meal.discount.addOnWorthIt ? "to unlock a better coupon threshold." : "only if you already need another item."
+      }`
+    );
   } else {
     out.push(`${b("Food coupon")}: no applicable coupon returned by MCP for this estimate.`);
   }
@@ -488,6 +618,84 @@ function searchKeyboard(search: FoodSearchSession): unknown {
   return { inline_keyboard: rows };
 }
 
+function renderInstamartPage(search: InstamartSearchSession): string {
+  const current = clampInstamartPage(search);
+  const pageCount = Math.max(1, Math.ceil(current.options.length / PAGE_SIZE));
+  const start = current.page * PAGE_SIZE;
+  const visible = current.options.slice(start, start + PAGE_SIZE);
+  const out = [b("Instamart matches"), `${b("Query")}: ${h(current.query)}`, `${b("Page")}: ${current.page + 1}/${pageCount}`, ""];
+  visible.forEach((item, offset) => {
+    out.push(
+      [
+        b(`${start + offset + 1}. ${item.title}`),
+        item.brand ? `${b("Brand")}: ${h(item.brand)}` : undefined,
+        item.quantityText ? `${b("Pack")}: ${h(item.quantityText)}` : undefined,
+        item.price !== undefined ? `${b("Price")}: Rs ${Math.round(item.price)}` : undefined,
+        item.mrp !== undefined && item.price !== undefined && item.mrp > item.price ? `${b("Savings")}: Rs ${Math.round(item.mrp - item.price)}` : undefined,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      ""
+    );
+  });
+  out.push("Use Add to place the product in Instamart cart. Checkout is not automatic.");
+  return out.join("\n").trim();
+}
+
+function instamartKeyboard(search: InstamartSearchSession): unknown {
+  const current = clampInstamartPage(search);
+  const start = current.page * PAGE_SIZE;
+  const visible = current.options.slice(start, start + PAGE_SIZE);
+  const rows = visible.map((_, offset) => [{ text: `Add ${start + offset + 1}`, callback_data: `im:add:${start + offset}` }]);
+  const nav = [];
+  if (current.page > 0) nav.push({ text: "Prev", callback_data: `im:page:${current.page - 1}` });
+  if (start + PAGE_SIZE < current.options.length) nav.push({ text: "Next", callback_data: `im:page:${current.page + 1}` });
+  if (nav.length > 0) rows.push(nav);
+  return { inline_keyboard: rows };
+}
+
+function renderDineoutPage(search: DineoutSearchSession): string {
+  const current = clampDineoutPage(search);
+  const pageCount = Math.max(1, Math.ceil(current.options.length / PAGE_SIZE));
+  const start = current.page * PAGE_SIZE;
+  const visible = current.options.slice(start, start + PAGE_SIZE);
+  const out = [b("Dineout matches"), `${b("Query")}: ${h(current.query)}`, `${b("Page")}: ${current.page + 1}/${pageCount}`, ""];
+  visible.forEach((item, offset) => {
+    out.push(
+      [
+        b(`${start + offset + 1}. ${item.title}`),
+        item.area ? `${b("Area")}: ${h(item.area)}` : undefined,
+        item.rating ? `${b("Rating")}: ${h(item.rating)}` : undefined,
+        item.costForTwo ? `${b("Cost")}: ${h(item.costForTwo)}` : undefined,
+        item.offer ? `${b("Offer")}: ${h(item.offer)}` : undefined,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      ""
+    );
+  });
+  out.push("Use Details or Slots. Booking is not automatic.");
+  return out.join("\n").trim();
+}
+
+function dineoutKeyboard(search: DineoutSearchSession): unknown {
+  const current = clampDineoutPage(search);
+  const start = current.page * PAGE_SIZE;
+  const visible = current.options.slice(start, start + PAGE_SIZE);
+  const rows = visible.map((_, offset) => {
+    const index = start + offset;
+    return [
+      { text: `Details ${index + 1}`, callback_data: `do:detail:${index}` },
+      { text: `Slots ${index + 1}`, callback_data: `do:slots:${index}` },
+    ];
+  });
+  const nav = [];
+  if (current.page > 0) nav.push({ text: "Prev", callback_data: `do:page:${current.page - 1}` });
+  if (start + PAGE_SIZE < current.options.length) nav.push({ text: "Next", callback_data: `do:page:${current.page + 1}` });
+  if (nav.length > 0) rows.push(nav);
+  return { inline_keyboard: rows };
+}
+
 function parseFoodQuery(text: string): { query: string; mode: FoodSearchMode } | undefined {
   const normalized = text.trim();
   const mode: FoodSearchMode = /^(?:cheapest|lowest|budget)\b/i.test(normalized) ? "cheapest" : "best_value";
@@ -497,12 +705,32 @@ function parseFoodQuery(text: string): { query: string; mode: FoodSearchMode } |
   return undefined;
 }
 
+function parseInstamartQuery(text: string): string | undefined {
+  const normalized = text.trim();
+  const match = normalized.match(/^(?:instamart|grocery|groceries|mart)\s+(.+)$/i);
+  if (match?.[1]) return match[1].replace(/\b(please|for me)\b/gi, "").trim();
+  if (/\b(milk|bread|egg|eggs|atta|rice|dal|curd|butter|cheese|oil|shampoo|soap|toothpaste|biscuits)\b/i.test(normalized)) {
+    return normalized;
+  }
+  return undefined;
+}
+
+function parseDineoutQuery(text: string): string | undefined {
+  const normalized = text.trim();
+  const match = normalized.match(/^(?:dineout|table|book table|restaurant booking)\s+(.+)$/i);
+  if (match?.[1]) return match[1].replace(/\b(please|for me)\b/gi, "").trim();
+  if (/\b(book|table|dineout|dinner|lunch)\b/i.test(normalized)) {
+    return normalized.replace(/\b(book|table|for\s+\d+|people|person|today|tomorrow)\b/gi, " ").replace(/\s+/g, " ").trim();
+  }
+  return undefined;
+}
+
 function helpText(user: TelegramUserProfile): string {
   return [
     b("Swiggy food assistant"),
     "",
     b("Commands"),
-    `${code("/auth food")} - link Swiggy Food`,
+    `${code("/auth food|instamart|dineout")} - link a Swiggy service`,
     `${code("/init")} - show this agent setup`,
     `${code("/status")} - auth and address status`,
     `${code("/addresses")} - saved Swiggy addresses`,
@@ -510,7 +738,10 @@ function helpText(user: TelegramUserProfile): string {
     `${code("/address <full address>")} - save and resolve address text`,
     `${code("biryani")} - browse food matches`,
     `${code("4 roti and paneer sabzi")} - build a same-restaurant meal`,
+    `${code("instamart milk bread")} - browse grocery matches`,
+    `${code("dineout italian")} - browse table/restaurant options`,
     `${code("/cart")} - inspect cart`,
+    `${code("/imcart")} - inspect Instamart cart`,
     `${code("/payment")} - show payment methods returned by Swiggy`,
     `${code("/track <orderId>")} - track order and driver location if returned`,
     `${code("/cancel")} - clear pending action`,
