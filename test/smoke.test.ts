@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { TOOL_CATALOG, ERGONOMIC_ALIASES, DESTRUCTIVE_TOOLS } from "../src/lib/aliases.js";
 import { EXIT_CODE, CliError } from "../src/lib/errors.js";
 import { renderJson } from "../src/lib/renderers/json.js";
+import { renderToolHuman } from "../src/lib/renderers/toolHuman.js";
 import { SCHEMA_FIXTURES } from "../src/lib/schema.js";
 
 describe("aliases", () => {
@@ -70,4 +71,61 @@ describe("renderers", () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.data.hello).toBe("world");
   });
+
+  it("tool human renderer formats addresses with address lines", () => {
+    const output = captureStdout(() =>
+      renderToolHuman(
+        {
+          addresses: [
+            {
+              id: "addr_1",
+              addressLine: "Fixture address line",
+              phoneNumber: "****2423",
+              addressTag: "Home",
+            },
+          ],
+        },
+        { tool: "get_addresses", server: "food", quiet: true }
+      )
+    );
+
+    expect(output).toContain("Addresses");
+    expect(output).toContain("Fixture address line");
+    expect(output).toContain("addr_1");
+  });
+
+  it("tool human renderer formats menu items without raw JSON blobs", () => {
+    const output = captureStdout(() =>
+      renderToolHuman(
+        {
+          categories: [
+            {
+              title: "Recommended",
+              items: [{ id: "item_1", name: "Fixture menu item", price: 180, rating: "4.5" }],
+            },
+          ],
+        },
+        { tool: "get_restaurant_menu", server: "food", quiet: true }
+      )
+    );
+
+    expect(output).toContain("Items");
+    expect(output).toContain("Fixture menu item");
+    expect(output).toContain("Rs 180");
+  });
 });
+
+function captureStdout(fn: () => void): string {
+  const chunks: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  (process.stdout.write as unknown) = (s: string) => {
+    chunks.push(s);
+    return true;
+  };
+  try {
+    fn();
+  } finally {
+    (process.stdout.write as unknown) = orig;
+  }
+  return chunks.join("");
+}
