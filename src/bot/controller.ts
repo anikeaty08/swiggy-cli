@@ -6,6 +6,7 @@ import { FoodAgent } from "../agent/foodAgent.js";
 import { renderFoodCartSummary, renderPaymentSummary } from "../agent/cartSummary.js";
 import { renderTrackingSummary } from "../agent/trackingSummary.js";
 import { deepFindArray, firstString } from "../agent/jsonHeuristics.js";
+import { geocodeAddress } from "../lib/geocode.js";
 import { b, code, h, lines } from "./format.js";
 
 export interface TelegramBotOptions {
@@ -57,13 +58,14 @@ export class SwiggyTelegramBot {
     try {
       if (message.location) {
         await this.store.updateUser(telegramUserId, {
-          city: `${message.location.latitude},${message.location.longitude}`,
+          manualLatitude: message.location.latitude,
+          manualLongitude: message.location.longitude,
         });
         await this.client.sendMessage(
           chatId,
           lines([
             b("Location received"),
-            "I saved the shared coordinates for context.",
+            "I saved the shared coordinates for tracking/location-aware commands.",
             "",
             "Food ordering still needs a saved Swiggy address id.",
             `Send ${code("/addresses")} and then ${code("/location <addressId>")}.`,
@@ -258,6 +260,7 @@ export class SwiggyTelegramBot {
       `${b("Auth store")}: ${code(user.swiggyHome)}`,
       `${b("Saved address id")}: ${user.addressId ? code(user.addressId) : "not set"}`,
       `${b("Manual address")}: ${user.manualAddress ? h(user.manualAddress) : "not set"}`,
+      `${b("Resolved coordinates")}: ${user.manualLatitude !== undefined && user.manualLongitude !== undefined ? h(`${user.manualLatitude}, ${user.manualLongitude}`) : "not set"}`,
       "",
     ];
     for (const row of servers) {
@@ -306,34 +309,55 @@ export class SwiggyTelegramBot {
       return lines([
         b("Set delivery location"),
         `${b("Saved Swiggy address")}: ${code("/location <addressId>")}`,
-        `${b("Manual address note")}: ${code("/address <full address>")}`,
+        `${b("Typed address")}: ${code("/location <full address>")}`,
         "",
-        `Use ${code("/addresses")} to see saved address ids.`,
+        `I will convert typed addresses to coordinates. Use ${code("/addresses")} to see saved address ids for Food.`,
       ]);
     }
     if (looksLikeAddressId(value)) {
       await this.store.updateUser(telegramUserId, { addressId: value, lastPlan: undefined });
       return lines([b("Delivery address selected"), `${b("Address id")}: ${code(value)}`]);
     }
-    await this.store.updateUser(telegramUserId, { manualAddress: value, lastPlan: undefined });
-    return [
-      b("Manual address saved"),
-      h(value),
-      "",
-      `Food search/cart still needs a saved Swiggy address id. Send ${code("/addresses")}, then ${code("/location <addressId>")}.`,
-    ].join("\n");
+    return this.saveManualAddress(telegramUserId, value);
   }
 
   private async setManualAddress(telegramUserId: number, text: string): Promise<string> {
     const value = text.replace(/^\/address\s*/i, "").trim();
     if (!value) return lines([b("Save manual address"), `Use ${code("/address <full address>")}.`]);
-    await this.store.updateUser(telegramUserId, { manualAddress: value, lastPlan: undefined });
-    return [
-      b("Manual address saved"),
-      h(value),
-      "",
-      `Swiggy Food still requires a saved address id for search/cart. Use ${code("/addresses")} and ${code("/location <addressId>")}.`,
-    ].join("\n");
+    return this.saveManualAddress(telegramUserId, value);
+  }
+
+  private async saveManualAddress(telegramUserId: number, value: string): Promise<string> {
+    try {
+      const point = await geocodeAddress(value);
+      await this.store.updateUser(telegramUserId, {
+        manualAddress: value,
+        manualLatitude: point.latitude,
+        manualLongitude: point.longitude,
+        lastPlan: undefined,
+      });
+      return [
+        b("Address saved"),
+        h(value),
+        `${b("Resolved")}: ${h(`${point.latitude}, ${point.longitude}`)}`,
+        "",
+        `Food search/cart still needs a saved Swiggy address id. Send ${code("/addresses")}, then ${code("/location <addressId>")}.`,
+      ].join("\n");
+    } catch (err) {
+      await this.store.updateUser(telegramUserId, {
+        manualAddress: value,
+        manualLatitude: undefined,
+        manualLongitude: undefined,
+        lastPlan: undefined,
+      });
+      return [
+        b("Address text saved"),
+        h(value),
+        "",
+        `I could not resolve coordinates yet: ${h(err instanceof Error ? err.message : String(err))}`,
+        `Try a more complete address. Food search/cart still needs ${code("/location <addressId>")}.`,
+      ].join("\n");
+    }
   }
 
   private async renderCart(user: TelegramUserProfile): Promise<string> {
@@ -482,8 +506,8 @@ function helpText(user: TelegramUserProfile): string {
     `${code("/init")} - show this agent setup`,
     `${code("/status")} - auth and address status`,
     `${code("/addresses")} - saved Swiggy addresses`,
-    `${code("/location <addressId>")} - choose delivery address`,
-    `${code("/address <full address>")} - save manual address text`,
+    `${code("/location <addressId or full address>")} - choose or resolve delivery location`,
+    `${code("/address <full address>")} - save and resolve address text`,
     `${code("biryani")} - browse food matches`,
     `${code("4 roti and paneer sabzi")} - build a same-restaurant meal`,
     `${code("/cart")} - inspect cart`,

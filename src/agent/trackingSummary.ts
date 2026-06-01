@@ -31,6 +31,15 @@ export function renderTrackingSummary(payload: unknown): string {
 }
 
 function findObjectWithLatLng(payload: unknown): Record<string, unknown> | undefined {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    if (
+      firstNumber(record, ["lat", "latitude"]) !== undefined &&
+      firstNumber(record, ["lng", "lon", "longitude"]) !== undefined
+    ) {
+      return record;
+    }
+  }
   const candidates = deepFindArray(payload, ["locations", "tracking", "data"]) ?? [];
   for (const candidate of candidates) {
     if (!candidate || typeof candidate !== "object") continue;
@@ -42,7 +51,7 @@ function findObjectWithLatLng(payload: unknown): Record<string, unknown> | undef
       return record;
     }
   }
-  return findObjectWithAny(payload, ["lat", "latitude", "lng", "longitude"], true);
+  return undefined;
 }
 
 function findObjectWithAny(payload: unknown, keys: string[], requireAll = false): Record<string, unknown> | undefined {

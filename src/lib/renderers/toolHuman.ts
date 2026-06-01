@@ -98,8 +98,8 @@ const restaurantColumns: Column[] = [
 ];
 
 const itemColumns: Column[] = [
-  { key: "item", pick: ["name", "itemName", "title", "productName"] },
-  { key: "restaurant", pick: ["restaurantName", "restaurant", "storeName", "brand"] },
+  { key: "item", pick: ["name", "itemName", "title", "productName", "displayName", "display_name"] },
+  { key: "source", label: "Source", pick: ["restaurantName", "restaurant", "storeName", "brand"] },
   { key: "price", pick: ["price", "finalPrice", "defaultPrice", "cost", "itemPrice"], format: (v) => money(toNumber(v)) },
   { key: "rating", pick: ["rating", "avgRating"] },
   { key: "veg", pick: ["isVeg", "veg", "is_veg"], format: (v) => boolish(v) },
@@ -187,17 +187,17 @@ function renderRows(rows: Record<string, unknown>[], columns: Column[], emptyMes
     }
     return out;
   });
-  const headers = columns.map((c) => c.key).filter((key) => projected.some((row) => row[key] !== undefined));
+  const headers = columns.filter((column) => projected.some((row) => row[column.key] !== undefined));
   if (headers.length === 0) {
     process.stdout.write(`${emptyMessage}\n`);
     return;
   }
   const table = new Table({
-    head: headers.map((h) => ui.accent(label(h))),
+    head: headers.map((h) => ui.accent(h.label ?? label(h.key))),
     wordWrap: true,
     style: { head: [], border: [] },
   });
-  for (const row of projected) table.push(headers.map((h) => format(row[h])));
+  for (const row of projected) table.push(headers.map((h) => format(row[h.key])));
   process.stdout.write(`${table.toString()}\n`);
 }
 
@@ -233,11 +233,11 @@ function collectItemRecords(data: unknown): Record<string, unknown>[] {
       if (value && typeof value === "object") queue.push(value);
     }
   }
-  return dedupe(out, (row) => String(pick(row, ["id", "itemId", "skuId", "spinId"]) ?? pick(row, ["name", "itemName", "title"]) ?? JSON.stringify(row)));
+  return dedupe(out, (row) => String(pick(row, ["id", "itemId", "skuId", "spinId"]) ?? pick(row, ["name", "itemName", "title", "productName", "displayName", "display_name"]) ?? JSON.stringify(row)));
 }
 
 function looksLikeItem(row: Record<string, unknown>): boolean {
-  return Boolean(pick(row, ["name", "itemName", "title", "productName"]) && (toNumber(pick(row, ["price", "finalPrice", "defaultPrice", "cost", "itemPrice"])) !== undefined || pick(row, ["id", "itemId", "skuId", "spinId"])));
+  return Boolean(pick(row, ["name", "itemName", "title", "productName", "displayName", "display_name"]) && (toNumber(pick(row, ["price", "finalPrice", "defaultPrice", "cost", "itemPrice"])) !== undefined || pick(row, ["id", "itemId", "skuId", "spinId"])));
 }
 
 function extractRows(data: unknown, keys: string[]): Record<string, unknown>[] {

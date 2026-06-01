@@ -40,6 +40,8 @@ export interface TelegramUserProfile {
   swiggyHome: string;
   addressId?: string;
   manualAddress?: string;
+  manualLatitude?: number;
+  manualLongitude?: number;
   city?: string;
   lastPlan?: PendingFoodPlan;
   lastSearch?: FoodSearchSession;

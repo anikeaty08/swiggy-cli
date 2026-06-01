@@ -41,7 +41,7 @@ program
     `\nExamples:\n` +
       `  $ swiggy food search-restaurants --query "biryani" --address-id addr_123\n` +
       `  $ swiggy instamart search --query "milk bread eggs" --json\n` +
-      `  $ swiggy dineout search --query "italian" --lat 12.9716 --lng 77.5946\n` +
+      `  $ swiggy dineout search --query "italian" --address "Indiranagar, Bengaluru"\n` +
       `  $ swiggy servers --json\n` +
       `  $ swiggy tools food | head\n` +
       `  $ swiggy schema food search_restaurants\n` +

@@ -207,7 +207,7 @@ export async function ensureDineoutLocation(
   if (isMachineMode(opts)) {
     throw new UsageError(
       `Missing location for ${requiredBy}.`,
-      "Use --address-id <id> (from `swiggy dineout locations`) or --lat/--lng"
+      "Use --address \"full address\", --address-id <id> (from `swiggy dineout locations`), or --lat/--lng"
     );
   }
   const { profile } = await getCurrentProfile(opts.profile);
@@ -216,7 +216,7 @@ export async function ensureDineoutLocation(
   const payload = extractToolPayload(result);
   const addresses = extractAddresses(payload);
   if (addresses.length === 0) {
-    throw new UsageError("No saved locations found for dineout.", "Use --lat/--lng to search by coordinates");
+    throw new UsageError("No saved locations found for dineout.", "Use --address \"full address\" or --lat/--lng");
   }
   const response = await prompts({
     type: "select",
@@ -225,7 +225,7 @@ export async function ensureDineoutLocation(
     choices: addresses.map((a) => ({ title: a.label, value: a.id })),
   });
   if (!response.addressId) {
-    throw new UsageError("Location selection cancelled.", "Re-run with --address-id, or use --lat/--lng");
+    throw new UsageError("Location selection cancelled.", "Re-run with --address-id, --address, or --lat/--lng");
   }
   return { addressId: response.addressId as string };
 }
@@ -298,7 +298,7 @@ function hintForToolError(server: ServerName, tool: string, message: string): st
     return `Run: swiggy ${server} addresses, then retry with --address-id <id>`;
   }
   if (/location is required/i.test(message) && server === "dineout") {
-    return "Run: swiggy dineout locations, then retry with --address-id <id> (or pass --lat/--lng)";
+    return "Pass --address \"full address\", or run: swiggy dineout locations, then retry with --address-id <id>";
   }
   if (/required/i.test(message)) {
     return `Run: swiggy schema ${server} ${tool} --json to inspect required arguments`;

@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { TOOL_CATALOG, ERGONOMIC_ALIASES, DESTRUCTIVE_TOOLS } from "../src/lib/aliases.js";
 import { EXIT_CODE, CliError } from "../src/lib/errors.js";
+import { geocodeAddress } from "../src/lib/geocode.js";
 import { renderJson } from "../src/lib/renderers/json.js";
 import { renderToolHuman } from "../src/lib/renderers/toolHuman.js";
 import { SCHEMA_FIXTURES } from "../src/lib/schema.js";
@@ -112,6 +113,44 @@ describe("renderers", () => {
     expect(output).toContain("Items");
     expect(output).toContain("Fixture menu item");
     expect(output).toContain("Rs 180");
+  });
+
+  it("tool human renderer formats Instamart display names", () => {
+    const item = { spinId: "spin_1", displayName: "Sample grocery item", finalPrice: 64, brand: "Sample brand" };
+    const output = captureStdout(() =>
+      renderToolHuman(
+        {
+          items: [item],
+        },
+        { tool: "search_products", server: "instamart", quiet: true }
+      )
+    );
+
+    expect(output).toContain("Items");
+    expect(output).toContain(item.displayName);
+    expect(output).toContain(`Rs ${item.finalPrice}`);
+  });
+});
+
+describe("geocoding", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("converts address search responses into coordinates", async () => {
+    const geocoderResult = { lat: "12.9716", lon: "77.5946" };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [geocoderResult],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(geocodeAddress("sample address")).resolves.toEqual({
+      latitude: Number(geocoderResult.lat),
+      longitude: Number(geocoderResult.lon),
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
 

@@ -8,6 +8,7 @@ import {
   stripUndefined,
   toNonNegativeInteger,
 } from "../lib/payloads.js";
+import { geocodeAddress } from "../lib/geocode.js";
 
 export function buildInstamartCommands(program: Command): void {
   const im = program.command("instamart").description("Swiggy Instamart: groceries, cart, checkout");
@@ -157,13 +158,15 @@ export function buildInstamartCommands(program: Command): void {
     im
       .command("track <id>")
       .description("Track an Instamart order")
+      .option("--address <address>", "delivery address to geocode")
       .option("--lat <lat>", "delivery latitude")
       .option("--lng <lng>", "delivery longitude")
-      .action(async (id: string, o: { lat?: string; lng?: string }) => {
+      .action(async (id: string, o: { address?: string; lat?: string; lng?: string }) => {
+        const geocoded = o.address ? await geocodeAddress(o.address) : undefined;
         await callTool(
           "instamart",
           "track_order",
-          buildInstamartTrackPayload({ orderId: id, lat: o.lat, lng: o.lng }),
+          buildInstamartTrackPayload({ orderId: id, lat: geocoded?.latitude ?? o.lat, lng: geocoded?.longitude ?? o.lng }),
           await resolveExecOpts(im)
         );
       })

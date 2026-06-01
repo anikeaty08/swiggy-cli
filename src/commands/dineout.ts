@@ -9,6 +9,7 @@ import {
   stripUndefined,
   toNumber,
 } from "../lib/payloads.js";
+import { geocodeAddress } from "../lib/geocode.js";
 
 export function buildDineoutCommands(program: Command): void {
   const d = program.command("dineout").description("Swiggy Dineout: discover restaurants, slots, bookings");
@@ -21,19 +22,21 @@ export function buildDineoutCommands(program: Command): void {
       .option("-q, --query <q>", "search query")
       .option("--entity-type <type>", "optional filter type: locality|CUISINE|RESTAURANT_CATEGORY")
       .option("--address-id <id>", "saved location id from dineout locations")
+      .option("--address <address>", "plain address to geocode")
       .option("--lat <lat>", "latitude")
       .option("--lng <lng>", "longitude")
-      .action(async (o: { query?: string; entityType?: string; addressId?: string; lat?: string; lng?: string }) => {
+      .action(async (o: { query?: string; entityType?: string; addressId?: string; address?: string; lat?: string; lng?: string }) => {
         const opts = await resolveExecOpts(d);
         if (!o.query) {
           throw new UsageError("Missing required option --query.");
         }
+        const geocoded = o.address ? await geocodeAddress(o.address) : undefined;
         const location = await ensureDineoutLocation(
           opts,
           stripUndefined({
             addressId: o.addressId,
-            latitude: o.lat !== undefined ? toNumber(o.lat, "--lat") : undefined,
-            longitude: o.lng !== undefined ? toNumber(o.lng, "--lng") : undefined,
+            latitude: geocoded?.latitude ?? (o.lat !== undefined ? toNumber(o.lat, "--lat") : undefined),
+            longitude: geocoded?.longitude ?? (o.lng !== undefined ? toNumber(o.lng, "--lng") : undefined),
           }),
           "dineout search"
         );
@@ -50,13 +53,15 @@ export function buildDineoutCommands(program: Command): void {
     d
       .command("details <id>")
       .description("Show restaurant details (menu, ratings, offers)")
+      .option("--address <address>", "plain address to geocode")
       .option("--lat <lat>", "latitude used for the search")
       .option("--lng <lng>", "longitude used for the search")
-      .action(async (id: string, o: { lat?: string; lng?: string }) => {
+      .action(async (id: string, o: { address?: string; lat?: string; lng?: string }) => {
+        const geocoded = o.address ? await geocodeAddress(o.address) : undefined;
         await callTool(
           "dineout",
           "get_restaurant_details",
-          buildDineoutDetailsPayload({ restaurantId: id, lat: o.lat, lng: o.lng }),
+          buildDineoutDetailsPayload({ restaurantId: id, lat: geocoded?.latitude ?? o.lat, lng: geocoded?.longitude ?? o.lng }),
           await resolveExecOpts(d)
         );
       })
@@ -77,19 +82,21 @@ export function buildDineoutCommands(program: Command): void {
       .description("Get available booking slots for a restaurant")
       .option("--restaurant-id <id>", "restaurant id")
       .option("--date <yyyy-mm-dd>", "booking date")
+      .option("--address <address>", "plain address to geocode")
       .option("--lat <lat>", "latitude")
       .option("--lng <lng>", "longitude")
-      .action(async (o: { restaurantId?: string; date?: string; lat?: string; lng?: string }) => {
+      .action(async (o: { restaurantId?: string; date?: string; address?: string; lat?: string; lng?: string }) => {
         if (!o.restaurantId) {
           throw new UsageError("Missing required option --restaurant-id.", "Run: swiggy dineout search first");
         }
         if (!o.date) {
           throw new UsageError("Missing required option --date.");
         }
+        const geocoded = o.address ? await geocodeAddress(o.address) : undefined;
         await callTool(
           "dineout",
           "get_available_slots",
-          buildDineoutSlotsPayload(o),
+          buildDineoutSlotsPayload({ ...o, lat: geocoded?.latitude ?? o.lat, lng: geocoded?.longitude ?? o.lng }),
           await resolveExecOpts(d)
         );
       })

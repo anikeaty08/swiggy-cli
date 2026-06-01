@@ -102,8 +102,8 @@ export function buildInstamartCheckoutPayload(o: { addressId: string; paymentMet
   return stripUndefined({ addressId: o.addressId, paymentMethod: o.paymentMethod });
 }
 
-export function buildInstamartTrackPayload(o: { orderId: string; lat?: string; lng?: string }): Record<string, unknown> {
-  return { orderId: o.orderId, lat: toNumber(o.lat, "--lat"), lng: toNumber(o.lng, "--lng") };
+export function buildInstamartTrackPayload(o: { orderId: string; lat?: string | number; lng?: string | number }): Record<string, unknown> {
+  return { orderId: o.orderId, lat: toRequiredNumber(o.lat, "--lat"), lng: toRequiredNumber(o.lng, "--lng") };
 }
 
 export function buildDineoutSearchPayload(o: {
@@ -123,19 +123,19 @@ export function buildDineoutSearchPayload(o: {
   });
 }
 
-export function buildDineoutDetailsPayload(o: { restaurantId: string; lat?: string; lng?: string }): Record<string, unknown> {
+export function buildDineoutDetailsPayload(o: { restaurantId: string; lat?: string | number; lng?: string | number }): Record<string, unknown> {
   return {
     restaurantId: o.restaurantId,
-    latitude: toNumber(o.lat, "--lat"),
-    longitude: toNumber(o.lng, "--lng"),
+    latitude: toRequiredNumber(o.lat, "--lat"),
+    longitude: toRequiredNumber(o.lng, "--lng"),
   };
 }
 
 export function buildDineoutSlotsPayload(o: {
   restaurantId?: string;
   date?: string;
-  lat?: string;
-  lng?: string;
+  lat?: string | number;
+  lng?: string | number;
 }): Record<string, unknown> {
   if (!o.restaurantId) {
     throw new UsageError("Missing required option --restaurant-id.", "Run: swiggy dineout search first");
@@ -144,8 +144,8 @@ export function buildDineoutSlotsPayload(o: {
   return {
     restaurantId: o.restaurantId,
     date: o.date,
-    latitude: toNumber(o.lat, "--lat"),
-    longitude: toNumber(o.lng, "--lng"),
+    latitude: toRequiredNumber(o.lat, "--lat"),
+    longitude: toRequiredNumber(o.lng, "--lng"),
   };
 }
 
@@ -159,4 +159,12 @@ function parsePositiveQuantity(value: string | undefined): number {
     throw new UsageError("Invalid --quantity. It must be a positive number.");
   }
   return quantity;
+}
+
+function toRequiredNumber(value: string | number | undefined, flagName: string): number {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new UsageError(`Invalid ${flagName}. It must be a number.`);
+    return value;
+  }
+  return toNumber(value, flagName);
 }
