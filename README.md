@@ -159,6 +159,8 @@ swiggy call food search_restaurants --input '{"query":"pizza","addressId":"addr_
 
 Recommended flags:
 
+- `--dry-run` validates and prints the planned MCP call without sending it. Use it to test add-to-cart, checkout, clear-cart, and booking payloads safely.
+
 - `--json` for the stable envelope on stdout
 - `--no-interactive` to fail instead of prompting
 - `--quiet` to suppress non-essential logs

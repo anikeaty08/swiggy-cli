@@ -33,6 +33,7 @@ export interface OutputOptions {
   quiet?: boolean;
   noInteractive?: boolean;
   yes?: boolean;
+  dryRun?: boolean;
   profile?: string;
   warnings?: string[];
   meta?: Record<string, unknown>;

@@ -130,4 +130,41 @@ describe("CLI machine mode", () => {
     expect(result.stdout).toContain("complete");
     expect(result.stdout).toContain("swiggy");
   });
+
+  it("--dry-run validates mutation payloads without requiring auth", () => {
+    const result = runCli([
+      "food",
+      "add-to-cart",
+      "--restaurant-id",
+      "rest_1",
+      "--address-id",
+      "addr_1",
+      "--item-id",
+      "item_1",
+      "--quantity",
+      "2",
+      "--json",
+      "--no-interactive",
+      "--quiet",
+      "--dry-run",
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    const envelope = parseSingleJsonEnvelope(result.stdout);
+    expect(envelope).toMatchObject({
+      ok: true,
+      server: "food",
+      tool: "update_food_cart",
+      data: {
+        dryRun: true,
+        destructive: false,
+        args: {
+          restaurantId: "rest_1",
+          addressId: "addr_1",
+          cartItems: [{ itemId: "item_1", quantity: 2 }],
+        },
+      },
+    });
+  });
 });

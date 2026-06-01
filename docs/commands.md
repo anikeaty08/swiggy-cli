@@ -2,7 +2,9 @@
 
 > 🍽️ **Repo kitchen:** `anikeaty08/swiggy-cli` · Built for Food, Instamart, Dineout, and automation.
 
-Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`, `--no-interactive`, `-y/--yes`, `--profile <name>`.
+Every command accepts the global flags: `--json`, `--plain`, `--raw`, `--quiet`, `--no-interactive`, `-y/--yes`, `--dry-run`, `--profile <name>`.
+
+Use `--dry-run` to validate and print the planned MCP call without sending it. This is the safe way to test add-to-cart, checkout, clear-cart, and booking payloads.
 
 ## Generic (Layer B â€” agent-preferred)
 

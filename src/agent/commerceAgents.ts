@@ -96,6 +96,9 @@ export class DineoutAgent {
   async details(search: DineoutSearchSession, index: number): Promise<string> {
     const option = search.options[index];
     if (!option?.restaurantId) return "That restaurant result did not include an id.";
+    if (search.latitude === undefined || search.longitude === undefined) {
+      return "Details need a coordinate-backed manual address. Send /address <full address>, then search Dineout again.";
+    }
     const res = await this.executor.dineoutDetails({
       restaurantId: option.restaurantId,
       latitude: search.latitude,

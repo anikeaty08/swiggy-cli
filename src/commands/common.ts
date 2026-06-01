@@ -21,6 +21,7 @@ export function attachOutputOptions(cmd: Command): Command {
     .option("--quiet", "suppress non-essential output")
     .option("--no-interactive", "disable prompts and spinners (machine mode)")
     .option("-y, --yes", "auto-confirm destructive actions")
+    .option("--dry-run", "validate and print the planned MCP call without sending it")
     .option("--profile <name>", "use a named profile");
 }
 
@@ -37,6 +38,7 @@ export function readGlobalOpts(cmd: Command): ExecOpts {
     quiet: o.quiet,
     noInteractive: o.noInteractive,
     yes: o.yes,
+    dryRun: o.dryRun,
     profile: o.profile,
   };
 }
@@ -53,6 +55,7 @@ export async function resolveExecOpts(cmd: Command): Promise<ExecOpts> {
     quiet: Boolean(raw.quiet),
     noInteractive: Boolean(raw.noInteractive || profile.noInteractive),
     yes: Boolean(raw.yes),
+    dryRun: Boolean(raw.dryRun),
     profile: raw.profile || name,
   };
 }
@@ -70,6 +73,13 @@ export async function callTool(
       if (!validation.ok) {
         throw new UsageError(`Invalid arguments for ${server}/${tool}: ${validation.errors.join("; ")}`);
       }
+    }
+    if (opts.dryRun) {
+      renderResult(
+        { dryRun: true, server, tool, args, destructive: DESTRUCTIVE_TOOLS.has(tool) },
+        { ...opts, server, tool, meta: { ...(opts.meta ?? {}), dryRun: true } }
+      );
+      return;
     }
     const { profile, name: profileName } = await getCurrentProfile(opts.profile);
     const ctx = { ...opts, server, tool, profile: opts.profile || profileName };

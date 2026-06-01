@@ -35,6 +35,7 @@ program
   .option("--quiet", "suppress non-essential output")
   .option("--no-interactive", "disable prompts and spinners (machine mode)")
   .option("-y, --yes", "auto-confirm destructive actions")
+  .option("--dry-run", "validate and print the planned MCP call without sending it")
   .option("--profile <name>", "use a named profile")
   .showHelpAfterError("(run swiggy --help for usage)")
   .addHelpText(

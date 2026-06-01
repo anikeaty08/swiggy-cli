@@ -129,8 +129,14 @@ export class SwiggyTelegramBot {
         return;
       }
       if (text === "/cancel") {
-        await this.store.updateUser(telegramUserId, { lastPlan: undefined });
-        await this.client.sendMessage(chatId, lines([b("Cancelled"), "Pending food action cleared."]), undefined, "HTML");
+        await this.store.updateUser(telegramUserId, {
+          lastPlan: undefined,
+          lastSearch: undefined,
+          lastInstamartPlan: undefined,
+          lastInstamartSearch: undefined,
+          lastDineoutSearch: undefined,
+        });
+        await this.client.sendMessage(chatId, lines([b("Cancelled"), "Pending actions cleared."]), undefined, "HTML");
         return;
       }
       if (/^(confirm|yes)$/i.test(text)) {
@@ -198,7 +204,7 @@ export class SwiggyTelegramBot {
 
       await this.client.sendMessage(
         chatId,
-        lines([b("Food assistant"), `Try ${code("biryani")}, ${code("4 roti and paneer sabzi")}, ${code("/addresses")}, or ${code("/status")}.`]),
+        lines([b("Swiggy assistant"), `Try ${code("biryani")}, ${code("instamart milk")}, ${code("dineout italian")}, ${code("/addresses")}, or ${code("/status")}.`]),
         undefined,
         "HTML"
       );
